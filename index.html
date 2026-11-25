@@ -1,0 +1,3762 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OceanFlow — 실시간 해양 쓰레기 이동 예측 시뮬레이터</title>
+    <meta
+      name="description"
+      content="실시간 기상·해양 API 데이터를 자동으로 수집해 해양 쓰레기의 이동 경로와 해안 도달 여부를 예측하는 인터랙티브 시뮬레이터"
+    />
+    <meta property="og:title" content="OceanFlow — 실시간 해양 쓰레기 이동 예측 시뮬레이터" />
+    <meta
+      property="og:description"
+      content="실시간 기상·해양 API 데이터를 자동으로 수집해 해양 쓰레기의 이동 경로와 해안 도달 여부를 예측하는 인터랙티브 시뮬레이터"
+    />
+    <meta property="og:type" content="website" />
+
+    <!-- External CDN Libraries Only: Google Fonts, Leaflet, TopoJSON Client -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin=""
+    ></script>
+    <script
+      src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"
+      crossorigin=""
+    ></script>
+
+    <style>
+      :root {
+        --bg-canvas: #060d1a;
+        --bg-panel: #0b1526;
+        --bg-sub: #081120;
+        --border-hairline: #162a47;
+        --border-focus: #1e3557;
+        --text-primary: #f1f5f9;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+        --text-dim: #64748b;
+        --accent-cyan: #22d3ee;
+        --accent-cyan-btn: #0891b2;
+        --accent-cyan-btn-hover: #06b6d4;
+        --accent-blue: #60a5fa;
+        --accent-amber: #f59e0b;
+        --accent-emerald: #34d399;
+        --accent-rose: #fb7185;
+        --font-sans: "Plus Jakarta Sans", "Noto Sans KR", -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        font-family: var(--font-sans);
+        scroll-behavior: smooth;
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        background-color: var(--bg-canvas);
+        color: var(--text-primary);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+
+      button,
+      input,
+      select {
+        font-family: inherit;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--accent-cyan);
+        outline-offset: 2px;
+      }
+
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Scrollbars */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--bg-canvas);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #1e3354;
+        border-radius: 3px;
+      }
+
+      /* Top Navigation Bar (Strict 3-Zone) */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 900;
+        border-bottom: 1px solid var(--border-hairline);
+        background: rgba(6, 13, 26, 0.94);
+        backdrop-filter: blur(8px);
+      }
+
+      .topbar-inner {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 12px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 32px;
+      }
+
+      .brand {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #f8fafc;
+        text-decoration: none;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .nav-links a {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-decoration: none;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: color 0.15s ease;
+      }
+
+      .nav-links a:hover {
+        color: var(--accent-cyan);
+        text-decoration: underline;
+        text-underline-offset: 4px;
+      }
+
+      .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: var(--accent-cyan-btn);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background-color 0.15s ease, opacity 0.15s ease;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: var(--accent-cyan-btn-hover);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: var(--bg-panel);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+      }
+
+      .btn-secondary:hover:not(:disabled) {
+        border-color: rgba(34, 211, 238, 0.5);
+        color: #ffffff;
+      }
+
+      .btn-secondary:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      /* Main Container */
+      .container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      /* Simulator Split Grid */
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: 340px minmax(0, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .main-stage-col {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-width: 0;
+      }
+
+      /* Cards / Panels */
+      .panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        padding: 18px;
+      }
+
+      .panel-tight {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .sub-card {
+        background: var(--bg-sub);
+        border: 1px solid var(--border-hairline);
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+
+      .section-divider {
+        border-top: 1px solid var(--border-hairline);
+        padding-top: 16px;
+        margin-top: 16px;
+      }
+
+      .panel-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+
+      .panel-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        color: #f8fafc;
+      }
+
+      .panel-sub {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      /* Form Controls */
+      .field-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+      }
+
+      .search-wrap {
+        position: relative;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 9px 12px 9px 34px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: var(--bg-canvas);
+        color: var(--text-primary);
+        font-size: 12px;
+      }
+
+      .search-input::placeholder {
+        color: var(--text-dim);
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 11px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        pointer-events: none;
+        font-size: 13px;
+      }
+
+      .search-dropdown {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 600;
+        max-height: 220px;
+        overflow-y: auto;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: #091324;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+      }
+
+      .search-item {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: var(--text-primary);
+        padding: 9px 12px;
+        text-align: left;
+        cursor: pointer;
+        display: block;
+        border-bottom: 1px solid rgba(22, 42, 71, 0.5);
+      }
+
+      .search-item:hover {
+        background: #132540;
+      }
+
+      .search-item-name {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .search-item-detail {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      .preset-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .preset-btn {
+        border: 1px solid var(--border-focus);
+        background: var(--bg-sub);
+        color: var(--text-secondary);
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s ease;
+      }
+
+      .preset-btn:hover {
+        border-color: rgba(34, 211, 238, 0.5);
+        color: #ffffff;
+      }
+
+      .preset-btn.active {
+        border-color: rgba(34, 211, 238, 0.8);
+        background: rgba(34, 211, 238, 0.14);
+        color: #cffafe;
+      }
+
+      .debris-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .debris-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        padding: 9px 11px;
+        border-radius: 8px;
+        border: 1px solid var(--border-hairline);
+        background: var(--bg-sub);
+        color: var(--text-secondary);
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.15s ease;
+      }
+
+      .debris-btn:hover {
+        border-color: #274673;
+      }
+
+      .debris-btn.active {
+        border-color: var(--accent-cyan);
+        background: rgba(34, 211, 238, 0.14);
+        color: #f8fafc;
+      }
+
+      .debris-top {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .dot-swatch {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .debris-sub {
+        font-size: 10px;
+        color: var(--text-muted);
+      }
+
+      .range-slider {
+        width: 100%;
+        accent-color: var(--accent-cyan);
+        cursor: pointer;
+      }
+
+      .range-ticks {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+
+      .segmented-5 {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+        padding: 4px;
+        border-radius: 8px;
+        border: 1px solid var(--border-hairline);
+        background: var(--bg-canvas);
+      }
+
+      .seg-btn {
+        border: 0;
+        border-radius: 6px;
+        padding: 6px 4px;
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s ease;
+      }
+
+      .seg-btn:hover {
+        color: #ffffff;
+      }
+
+      .seg-btn.active {
+        background: var(--accent-cyan-btn);
+        color: #ffffff;
+      }
+
+      .select-input {
+        width: 100%;
+        padding: 9px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: var(--bg-canvas);
+        color: var(--text-primary);
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      /* Map Stage */
+      .map-topbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+
+      .map-viewport {
+        position: relative;
+        width: 100%;
+        height: 520px;
+        background: var(--bg-canvas);
+      }
+
+      #ocean-map {
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+      }
+
+      #particle-canvas {
+        position: absolute;
+        inset: 0;
+        z-index: 450;
+        pointer-events: none;
+      }
+
+      .leaflet-container {
+        background: #060d1a !important;
+        font-family: var(--font-sans) !important;
+      }
+
+      .leaflet-control-attribution {
+        background: rgba(6, 13, 26, 0.8) !important;
+        color: #64748b !important;
+        font-size: 10px !important;
+      }
+
+      .leaflet-control-attribution a {
+        color: #94a3b8 !important;
+      }
+
+      .map-hud-tl {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        z-index: 500;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: rgba(6, 13, 26, 0.88);
+        backdrop-filter: blur(6px);
+        font-size: 11px;
+      }
+
+      .map-hud-tr {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        z-index: 500;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .zoom-group {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: rgba(6, 13, 26, 0.9);
+      }
+
+      .zoom-btn {
+        width: 32px;
+        height: 32px;
+        border: 0;
+        background: transparent;
+        color: var(--text-primary);
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .zoom-btn:hover {
+        background: #132540;
+      }
+
+      .zoom-sep {
+        height: 1px;
+        background: var(--border-focus);
+      }
+
+      .map-toggle-btn {
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: rgba(6, 13, 26, 0.9);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .map-toggle-btn.active {
+        border-color: var(--accent-cyan);
+        background: rgba(34, 211, 238, 0.2);
+        color: #cffafe;
+      }
+
+      .map-toggle-btn.active-amber {
+        border-color: var(--accent-amber);
+        background: rgba(245, 158, 11, 0.2);
+        color: #fde68a;
+      }
+
+      .map-hud-bl {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        z-index: 500;
+        pointer-events: none;
+        padding: 6px 11px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: rgba(6, 13, 26, 0.88);
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+
+      .map-banner {
+        position: absolute;
+        left: 50%;
+        top: 14px;
+        transform: translateX(-50%);
+        z-index: 520;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      }
+
+      .map-banner.loading {
+        border: 1px solid rgba(34, 211, 238, 0.45);
+        background: rgba(6, 13, 26, 0.92);
+        color: #a5f3fc;
+      }
+
+      .map-banner.error {
+        left: 16px;
+        right: 16px;
+        transform: none;
+        border: 1px solid rgba(251, 113, 133, 0.6);
+        background: rgba(76, 5, 25, 0.94);
+        color: #ffe4e6;
+      }
+
+      /* Playback Toolbar */
+      .playback-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-hairline);
+        background: var(--bg-sub);
+      }
+
+      .playback-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .speed-group {
+        display: inline-flex;
+        padding: 2px;
+        border-radius: 8px;
+        border: 1px solid var(--border-focus);
+        background: var(--bg-canvas);
+      }
+
+      .speed-btn {
+        border: 0;
+        border-radius: 6px;
+        padding: 4px 8px;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .speed-btn.active {
+        background: var(--border-hairline);
+        color: var(--accent-cyan);
+      }
+
+      .scrubber-wrap {
+        flex: 1 1 240px;
+        max-width: 440px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      /* Environment & Metrics Grids */
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .grid-2-asym {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      .grid-2-equal {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      .metric-value {
+        font-size: 24px;
+        font-weight: 600;
+        color: #f8fafc;
+      }
+
+      .metric-unit {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-left: 4px;
+      }
+
+      .status-real {
+        color: var(--accent-emerald);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .status-assumed {
+        color: var(--accent-amber);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .status-missing {
+        color: var(--accent-rose);
+        font-size: 11px;
+        font-weight: 500;
+      }
+
+      .notes-box {
+        margin-top: 14px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid rgba(245, 158, 11, 0.35);
+        background: rgba(69, 26, 3, 0.25);
+        color: #fde68a;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .notes-box ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+
+      /* Chart Box */
+      .chart-box {
+        border: 1px solid var(--border-hairline);
+        border-radius: 8px;
+        background: var(--bg-canvas);
+        padding: 10px;
+      }
+
+      .chart-svg {
+        width: 100%;
+        height: 170px;
+        display: block;
+        user-select: none;
+      }
+
+      .chart-readout {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 8px;
+        border-top: 1px solid var(--border-hairline);
+        padding: 8px 6px 2px;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+
+      /* Debris Comparison Bars */
+      .debris-comp-item {
+        border: 1px solid var(--border-hairline);
+        background: var(--bg-canvas);
+        border-radius: 6px;
+        padding: 9px 11px;
+      }
+
+      .debris-comp-item.selected {
+        border-color: rgba(34, 211, 238, 0.65);
+        background: rgba(34, 211, 238, 0.1);
+      }
+
+      .bar-track {
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--border-hairline);
+        overflow: hidden;
+        margin: 6px 0;
+      }
+
+      .bar-fill {
+        height: 100%;
+        border-radius: 999px;
+      }
+
+      /* Comparison Table */
+      .table-scroll {
+        overflow-x: auto;
+        margin-top: 14px;
+      }
+
+      table {
+        width: 100%;
+        min-width: 680px;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+      }
+
+      th {
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--border-hairline);
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      td {
+        padding: 10px;
+        border-bottom: 1px solid var(--border-hairline);
+        vertical-align: middle;
+      }
+
+      tr.comp-active {
+        background: rgba(245, 158, 11, 0.08);
+      }
+
+      .formula-box {
+        margin-top: 10px;
+        padding: 9px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border-hairline);
+        background: var(--bg-canvas);
+        color: #a5f3fc;
+        font-size: 11px;
+        overflow-x: auto;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border-hairline);
+        margin-top: 16px;
+        padding: 18px 20px;
+      }
+
+      .footer-inner {
+        max-width: 1600px;
+        margin: 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      /* Responsive Breakpoints */
+      @media (max-width: 1080px) {
+        .workspace-grid {
+          grid-template-columns: 1fr;
+        }
+        .grid-2-asym {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 820px) {
+        .nav-links {
+          display: none;
+        }
+        .grid-3,
+        .grid-4,
+        .grid-2-equal {
+          grid-template-columns: 1fr;
+        }
+        .map-viewport {
+          height: 400px;
+        }
+      }
+    </style>
+  <script src="/_aistudio-iframe.js?v=29045eb3"></script></head>
+
+  <body>
+    <!-- Top Bar (3-zone contract) -->
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a href="#simulator" class="brand">OceanFlow</a>
+        <nav class="nav-links" aria-label="주요 섹션 이동">
+          <a href="#simulator">지도 시뮬레이터</a>
+          <a href="#environment">수집 환경 데이터</a>
+          <a href="#results">결과 및 조건 비교</a>
+        </nav>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <button id="btn-download-html" type="button" class="btn-secondary" title="GitHub·Vercel 배포 또는 로컬 더블클릭 실행용 단일 index.html 파일 저장">
+            index.html 저장
+          </button>
+          <button id="btn-refresh" type="button" class="btn-primary">
+            데이터 갱신
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Simulator Split Section -->
+      <section id="simulator" class="workspace-grid">
+        <!-- Left Input Panel -->
+        <aside class="panel" aria-label="시뮬레이션 입력 패널">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <h2 style="margin:0; font-size:14px; font-weight:600;">시뮬레이션 조건 설정</h2>
+            <span style="font-size:11px; color:var(--text-muted);">환경 변수는 자동 수집</span>
+          </div>
+          <p style="margin:6px 0 0; font-size:12px; color:var(--text-muted);">
+            발생 위치와 쓰레기 종류만 선택하면 풍속·풍향·해류·파고 데이터를 자동으로 연동합니다.
+          </p>
+
+          <!-- 1. Location -->
+          <div class="section-divider">
+            <label for="location-search" class="field-label">
+              1. 쓰레기 발생 위치 (지도 클릭 또는 검색)
+            </label>
+            <div class="search-wrap">
+              <span class="search-icon" aria-hidden="true">⌕</span>
+              <input
+                id="location-search"
+                class="search-input"
+                type="text"
+                placeholder="해역, 항구, 도시명 또는 위도,경도 입력"
+                autocomplete="off"
+              />
+              <div id="search-dropdown" class="search-dropdown hidden"></div>
+            </div>
+
+            <div id="preset-row" class="preset-row"></div>
+
+            <div class="sub-card" style="margin-top:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                <span id="active-location-name" style="font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                  부산 해운대 외해
+                </span>
+                <span id="origin-land-status" style="font-size:11px; font-weight:500; white-space:nowrap;">
+                  ● 해상 판별
+                </span>
+              </div>
+              <div id="active-location-coords" class="mono" style="margin-top:4px; font-size:12px; color:var(--text-muted);">
+                35.1000°, 129.1900°
+              </div>
+              <div id="land-warning-box" class="hidden" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-hairline);">
+                <div style="font-size:11px; color:#fcd34d;">
+                  ▲ 육지 좌표는 해류 데이터가 제공되지 않으며 이동 계산이 제한됩니다.
+                </div>
+                <button
+                  id="btn-snap-ocean"
+                  type="button"
+                  class="btn-secondary"
+                  style="margin-top:6px; padding:5px 10px; font-size:11px; border-color:rgba(245,158,11,0.45); color:#fde68a;"
+                >
+                  가까운 해상으로 이동
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Debris Type -->
+          <div class="section-divider">
+            <div class="field-label">2. 쓰레기 종류</div>
+            <div id="debris-grid" class="debris-grid"></div>
+          </div>
+
+          <!-- 3. Debris Count -->
+          <div class="section-divider">
+            <div class="field-label">
+              <label for="debris-count-slider">3. 쓰레기 개수</label>
+              <span id="debris-count-val" class="mono" style="color:var(--accent-cyan); font-weight:600;">45개</span>
+            </div>
+            <input
+              id="debris-count-slider"
+              class="range-slider"
+              type="range"
+              min="1"
+              max="200"
+              step="1"
+              value="45"
+            />
+            <div class="range-ticks mono">
+              <span>1개 (단일)</span>
+              <span>100개</span>
+              <span>200개 (군집)</span>
+            </div>
+          </div>
+
+          <!-- 4. Simulation Duration -->
+          <div class="section-divider">
+            <div class="field-label">4. 시뮬레이션 기간</div>
+            <div id="duration-group" class="segmented-5"></div>
+          </div>
+
+          <!-- 5. Scenario Mode & Clear Time-Point Indicator -->
+          <div class="section-divider">
+            <div class="field-label">
+              <label for="scenario-select">5. 환경 데이터 시점 / 비교 조건</label>
+              <span id="control-loading-text" class="hidden" style="font-size:11px; color:var(--accent-cyan);">불러오는 중</span>
+            </div>
+            <div id="scenario-quick-row" style="display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:8px;"></div>
+            <select id="scenario-select" class="select-input"></select>
+            <div id="scenario-time-card" class="sub-card" style="margin-top:8px; padding:10px 12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:11px;">
+                <span style="color:var(--text-muted);">적용 시점</span>
+                <strong id="scenario-badge-text" style="color:var(--accent-cyan);">API 실시간 예보</strong>
+              </div>
+              <div id="scenario-window-text" class="mono" style="margin-top:4px; font-size:11px; color:var(--text-primary); line-height:1.45;">
+                데이터 불러오는 중...
+              </div>
+            </div>
+            <p id="scenario-desc" style="margin:6px 0 0; font-size:11px; color:var(--text-muted); line-height:1.5;"></p>
+          </div>
+        </aside>
+
+        <!-- Right Map Stage + Auto-Collected Environment Panel -->
+        <div class="main-stage-col">
+          <!-- Map Card -->
+          <div class="panel-tight">
+            <div class="map-topbar">
+              <div style="display:flex; align-items:center; gap:10px; font-size:12px;">
+                <span style="font-weight:600; color:#f8fafc;">실시간 해양 확산 지도</span>
+                <span style="color:var(--text-dim);">·</span>
+                <span style="color:var(--text-muted);">지도를 클릭해 발생 지점을 변경할 수 있습니다</span>
+              </div>
+              <div id="basemap-buttons" style="display:flex; gap:6px;"></div>
+            </div>
+
+            <div class="map-viewport">
+              <div id="ocean-map"></div>
+              <canvas id="particle-canvas"></canvas>
+
+              <div id="map-loading-banner" class="map-banner loading hidden">
+                Open-Meteo 기상·해양 API 데이터를 불러오는 중...
+              </div>
+              <div id="map-error-banner" class="map-banner error hidden"></div>
+
+              <!-- Top-Left Live Vector & Time/Weather HUD -->
+              <div id="map-vector-hud" class="map-hud-tl">
+                <div style="display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border-hairline); padding-bottom:4px; margin-bottom:2px;">
+                  <strong id="hud-sim-time" class="mono" style="color:var(--accent-cyan);">-</strong>
+                  <span style="color:var(--text-dim);">·</span>
+                  <span id="hud-weather-label" style="color:#fef3c7; font-weight:600;">날씨 확인 중</span>
+                </div>
+                <div>바람: <strong id="hud-wind" class="mono">-</strong></div>
+                <div>해류: <strong id="hud-current" class="mono">-</strong></div>
+              </div>
+
+              <!-- Top-Right Map Zoom & Layers -->
+              <div class="map-hud-tr">
+                <div class="zoom-group">
+                  <button id="btn-zoom-in" type="button" class="zoom-btn" title="지도 확대" aria-label="지도 확대">+</button>
+                  <div class="zoom-sep"></div>
+                  <button id="btn-zoom-out" type="button" class="zoom-btn" title="지도 축소" aria-label="지도 축소">−</button>
+                  <div class="zoom-sep"></div>
+                  <button id="btn-fit-track" type="button" class="zoom-btn" title="경로 전체 맞춤" aria-label="경로 전체 맞춤" style="color:var(--accent-cyan); font-size:13px;">⤢</button>
+                </div>
+                <button id="btn-toggle-land" type="button" class="map-toggle-btn">육지 경계</button>
+                <button id="btn-toggle-comp" type="button" class="map-toggle-btn hidden">비교 경로</button>
+              </div>
+
+              <!-- Bottom-Left Cursor Probe -->
+              <div id="map-cursor-probe" class="map-hud-bl">
+                원(●): 부유 중 · 사각형(■): 해안 도달
+              </div>
+            </div>
+
+            <!-- Playback Controls -->
+            <div class="playback-bar">
+              <div class="playback-controls">
+                <button id="btn-play" type="button" class="btn-primary">시뮬레이션 시작</button>
+                <button id="btn-restart" type="button" class="btn-secondary">재시작</button>
+                <div id="speed-group" class="speed-group"></div>
+                <button id="btn-sound-toggle" type="button" class="btn-secondary" title="현재 날씨에 맞춘 바람·비·파도·화창한 소리 켜기/끄기" style="border-color:rgba(34,211,238,0.45); color:#a5f3fc;">
+                  날씨 소리: 켜짐
+                </button>
+              </div>
+
+              <div class="scrubber-wrap">
+                <span id="time-elapsed-label" class="mono" style="font-size:12px; font-weight:600; color:var(--accent-cyan); white-space:nowrap;">
+                  T+0.0h
+                </span>
+                <input
+                  id="time-scrubber"
+                  class="range-slider"
+                  type="range"
+                  aria-label="시뮬레이션 경과 시간"
+                  min="0"
+                  max="24"
+                  step="0.25"
+                  value="0"
+                />
+                <span id="time-total-label" class="mono" style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+                  24h
+                </span>
+              </div>
+
+              <div class="mono" style="font-size:12px; color:var(--text-secondary); white-space:nowrap;">
+                이동 <strong id="hud-dist" style="color:#f8fafc;">0.0</strong> km ·
+                해안 도달 <strong id="hud-beached">0/45개</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Auto-Collected Environment Panel -->
+          <section id="environment" class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">자동 수집된 기상·해양 환경 데이터</h2>
+                <p id="env-sources" class="panel-sub">출처: Open-Meteo Weather API &amp; Marine API</p>
+              </div>
+              <div class="mono" style="font-size:11px; color:var(--text-muted); text-align:right;">
+                <div id="env-fetched-at">수집 시각: -</div>
+                <div id="env-ref-time" style="color:var(--accent-cyan); margin-top:2px;">적용 구간: -</div>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <!-- Wind Card -->
+              <div class="sub-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">표층 바람 (10m 고도)</span>
+                  <span id="status-wind" class="status-real">● API 실측·예보</span>
+                </div>
+                <div style="margin-top:10px; display:flex; align-items:baseline; gap:14px;">
+                  <div>
+                    <span id="val-wind-spd" class="metric-value mono">—</span>
+                    <span class="metric-unit mono">m/s</span>
+                  </div>
+                  <span id="val-wind-dir" class="mono" style="font-size:12px; color:var(--accent-cyan);">-</span>
+                </div>
+                <div id="grid-weather" class="mono" style="margin-top:8px; font-size:11px; color:var(--text-dim);">
+                  격자 좌표: -
+                </div>
+              </div>
+
+              <!-- Current Card -->
+              <div class="sub-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">표층 해류 (Ocean Current)</span>
+                  <span id="status-current" class="status-real">● API 실측·예보</span>
+                </div>
+                <div style="margin-top:10px; display:flex; align-items:baseline; gap:14px;">
+                  <div>
+                    <span id="val-cur-spd" class="metric-value mono">—</span>
+                    <span id="unit-cur-spd" class="metric-unit mono">m/s</span>
+                  </div>
+                  <span id="val-cur-dir" class="mono" style="font-size:12px; color:var(--accent-blue);">-</span>
+                </div>
+                <div id="grid-marine" class="mono" style="margin-top:8px; font-size:11px; color:var(--text-dim);">
+                  -
+                </div>
+              </div>
+
+              <!-- Wave Card -->
+              <div class="sub-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">파랑 (유의파고 · 주기)</span>
+                  <span id="status-wave" class="status-real">● API 실측·예보</span>
+                </div>
+                <div style="margin-top:10px; display:flex; align-items:baseline; gap:14px;">
+                  <div>
+                    <span id="val-wave-h" class="metric-value mono">—</span>
+                    <span id="unit-wave-h" class="metric-unit mono">m</span>
+                  </div>
+                  <span id="val-wave-dir" class="mono" style="font-size:12px; color:#5eead4;">-</span>
+                </div>
+                <div id="val-wave-period" class="mono" style="margin-top:8px; font-size:11px; color:var(--text-dim);">
+                  -
+                </div>
+              </div>
+            </div>
+
+            <div id="env-notes" class="notes-box hidden"></div>
+
+            <!-- Hourly Environmental SVG Chart -->
+            <div style="margin-top:18px;">
+              <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; font-size:12px;">
+                <span id="env-chart-title" style="font-weight:600; color:var(--text-secondary);">시간별 기상·해양 변화</span>
+                <div style="display:flex; gap:14px; font-size:11px; color:var(--text-muted);">
+                  <span><span style="display:inline-block; width:12px; height:2px; background:var(--accent-cyan); vertical-align:middle; margin-right:5px;"></span>풍속 (m/s)</span>
+                  <span><span style="display:inline-block; width:12px; height:2px; background:var(--accent-blue); vertical-align:middle; margin-right:5px;"></span>해류 (m/s)</span>
+                  <span><span style="display:inline-block; width:12px; border-top:2px dashed var(--accent-emerald); vertical-align:middle; margin-right:5px;"></span>파고 (m)</span>
+                </div>
+              </div>
+
+              <div class="chart-box">
+                <svg id="env-chart-svg" class="chart-svg" viewBox="0 0 620 150"></svg>
+                <div id="env-chart-readout" class="chart-readout mono">
+                  <span style="color:var(--text-dim);">그래프 위에 마우스를 올리면 시간별 풍속·해류·파고 수치를 확인할 수 있습니다.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Results Summary & Debris Comparison -->
+      <section id="results" class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">예측 시뮬레이션 결과 요약</h2>
+            <p id="result-meta-line" class="panel-sub">-</p>
+          </div>
+          <button id="btn-save-run" type="button" class="btn-secondary" style="border-color:rgba(34,211,238,0.5); background:rgba(34,211,238,0.12); color:#a5f3fc;">
+            현재 결과 저장
+          </button>
+        </div>
+
+        <div class="grid-4">
+          <div class="sub-card">
+            <div style="font-size:11px; color:var(--text-muted);">총 예상 이동 거리 (경로 누적)</div>
+            <div style="margin-top:6px;">
+              <span id="res-path-km" class="metric-value mono">0.00</span>
+              <span class="metric-unit mono">km</span>
+              <span id="res-path-nm" class="mono" style="font-size:11px; color:var(--text-dim); margin-left:4px;">(0.0 nm)</span>
+            </div>
+            <div id="res-net-km" class="mono" style="margin-top:4px; font-size:11px; color:var(--text-muted);">직선 변위 0.00 km</div>
+          </div>
+
+          <div class="sub-card">
+            <div style="font-size:11px; color:var(--text-muted);">주 이동 방향</div>
+            <div style="margin-top:6px; display:flex; align-items:baseline; gap:8px;">
+              <span id="res-bearing-deg" class="metric-value mono" style="color:var(--accent-cyan);">0°</span>
+              <span id="res-bearing-ko" style="font-size:13px; font-weight:600; color:var(--text-primary);">-</span>
+            </div>
+            <div id="res-duration-note" class="mono" style="margin-top:4px; font-size:11px; color:var(--text-muted);">-</div>
+          </div>
+
+          <div class="sub-card">
+            <div style="font-size:11px; color:var(--text-muted);">시작 → 예상 최종 위치</div>
+            <div id="res-origin-coord" class="mono" style="margin-top:8px; font-size:12px; color:var(--text-secondary);">출발: -</div>
+            <div id="res-final-coord" class="mono" style="margin-top:4px; font-size:13px; font-weight:600; color:#f8fafc;">도착: -</div>
+          </div>
+
+          <div class="sub-card">
+            <div style="font-size:11px; color:var(--text-muted);">해안 도달 여부 (Beaching)</div>
+            <div style="margin-top:6px; display:flex; align-items:baseline; gap:6px;">
+              <span id="res-beached-count" class="metric-value mono">0</span>
+              <span id="res-beached-total" class="mono" style="font-size:12px; color:var(--text-muted);">/ 45개 도달</span>
+            </div>
+            <div id="res-beached-note" style="margin-top:4px; font-size:11px; color:var(--text-muted);">-</div>
+          </div>
+        </div>
+
+        <div class="grid-2-asym">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; font-size:12px;">
+              <span style="font-weight:600; color:var(--text-secondary);">시간별 누적 이동 거리 그래프</span>
+              <div style="display:flex; gap:12px; font-size:11px; color:var(--text-muted);">
+                <span><span style="display:inline-block; width:12px; height:2px; background:var(--accent-cyan); vertical-align:middle; margin-right:5px;"></span>현재</span>
+                <span id="dist-comp-legend" class="hidden" style="color:#fcd34d;"><span style="display:inline-block; width:12px; border-top:2px dashed var(--accent-amber); vertical-align:middle; margin-right:5px;"></span>비교 실험</span>
+              </div>
+            </div>
+            <div class="chart-box">
+              <svg id="dist-chart-svg" class="chart-svg" style="height:190px;" viewBox="0 0 620 190"></svg>
+              <div id="dist-chart-readout" class="chart-readout mono">
+                <span style="color:var(--text-dim);">그래프 위에 마우스를 올리면 시간별 누적 거리(km)와 속도(m/s)를 확인할 수 있습니다.</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+              동일 환경 조건 · 쓰레기 종류별 이동 결과
+            </div>
+            <div id="debris-breakdown-list" class="sub-card" style="display:flex; flex-direction:column; gap:10px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Saved Experiments & Condition Comparison -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">환경 조건별 시뮬레이션 저장 및 비교</h2>
+            <p class="panel-sub">서로 다른 날짜의 실제 데이터나 가상 대체 조건으로 실행한 결과를 저장해 지도와 그래프 위에서 동시에 비교하세요.</p>
+          </div>
+          <button id="btn-clear-comp" type="button" class="btn-secondary hidden" style="border-color:rgba(245,158,11,0.45); color:#fde68a;">
+            비교 선택 해제
+          </button>
+        </div>
+
+        <div id="comp-delta-banner" class="grid-4 hidden" style="border:1px solid rgba(245,158,11,0.45); background:rgba(69,26,3,0.2); border-radius:8px; padding:12px;"></div>
+
+        <div id="saved-empty-box" style="margin-top:14px; border:1px dashed var(--border-focus); background:var(--bg-sub); border-radius:8px; padding:22px; text-align:center; font-size:12px; color:var(--text-muted);">
+          아직 저장된 시뮬레이션이 없습니다. 상단의 <strong style="color:var(--accent-cyan);">"현재 결과 저장"</strong> 버튼을 누른 뒤, 다른 날짜(1일 전/3일 전)나 가상 조건을 선택해 경로 차이를 비교해 보세요.
+        </div>
+
+        <div id="saved-table-wrap" class="table-scroll hidden">
+          <table>
+            <thead>
+              <tr>
+                <th>위치 및 쓰레기</th>
+                <th>환경 데이터 조건</th>
+                <th>기간</th>
+                <th style="text-align:right;">누적 이동거리</th>
+                <th style="text-align:right;">예상 최종 위치</th>
+                <th style="text-align:right;">해안 도달</th>
+                <th style="text-align:right;">비교</th>
+              </tr>
+            </thead>
+            <tbody id="saved-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <span>OceanFlow — 교육·탐색용 실시간 해양 쓰레기 이동 예측 시뮬레이터</span>
+        <span>기상·해양 데이터: Open-Meteo Weather &amp; Marine API · 지도: CARTO / Esri / OpenStreetMap</span>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        'use strict';
+
+        /* =========================================================
+           1. Domain Constants & Profiles
+        ========================================================= */
+        const EARTH_RADIUS_M = 6371000;
+        const STORAGE_KEY = 'oceanflow_saved_simulations_v1';
+
+        const COASTAL_PRESETS = [
+          { id: 'busan', name: '부산 해운대 외해', detail: '대한해협 동부 연안 · 35.10°N, 129.19°E', lat: 35.1, lng: 129.19 },
+          { id: 'jeju', name: '제주 성산포 동쪽 해역', detail: '제주 동부 · 33.46°N, 127.05°E', lat: 33.46, lng: 127.05 },
+          { id: 'incheon', name: '인천 영종도 서측 해역', detail: '서해 경기만 외해 · 37.42°N, 126.22°E', lat: 37.42, lng: 126.22 },
+          { id: 'pohang', name: '포항 영일만 외해', detail: '동해 남부 연안 · 36.12°N, 129.55°E', lat: 36.12, lng: 129.55 },
+          { id: 'tsushima', name: '대한해협 중앙 수로', detail: '쓰시마 난류 주축 · 34.45°N, 129.05°E', lat: 34.45, lng: 129.05 },
+          { id: 'pacific', name: '북태평양 아열대 환류대', detail: 'GPGP 서부 해역 · 32.50°N, 152.00°W', lat: 32.5, lng: -152.0 }
+        ];
+
+        const DEBRIS_LIST = [
+          {
+            id: 'plastic_bottle',
+            nameKo: '플라스틱병',
+            windageCoeff: 0.025,
+            currentCoupling: 1.0,
+            stokesFactor: 0.85,
+            eddyDiffusionMs: 0.055,
+            colorHex: '#22D3EE'
+          },
+          {
+            id: 'plastic_bag',
+            nameKo: '비닐',
+            windageCoeff: 0.012,
+            currentCoupling: 1.0,
+            stokesFactor: 0.65,
+            eddyDiffusionMs: 0.07,
+            colorHex: '#60A5FA'
+          },
+          {
+            id: 'styrofoam',
+            nameKo: '스티로폼',
+            windageCoeff: 0.045,
+            currentCoupling: 0.96,
+            stokesFactor: 1.0,
+            eddyDiffusionMs: 0.065,
+            colorHex: '#F59E0B'
+          },
+          {
+            id: 'other_floating',
+            nameKo: '기타 부유 쓰레기',
+            windageCoeff: 0.022,
+            currentCoupling: 1.0,
+            stokesFactor: 0.8,
+            eddyDiffusionMs: 0.06,
+            colorHex: '#34D399'
+          }
+        ];
+
+        const DEBRIS_MAP = Object.fromEntries(DEBRIS_LIST.map((d) => [d.id, d]));
+
+        const DURATIONS = [6, 12, 24, 48, 72];
+
+        const SCENARIO_OPTIONS = [
+          {
+            id: 'realtime',
+            labelKo: '실시간 API 데이터',
+            badgeKo: 'API 실측·예보',
+            descriptionKo: '현재 시각 기준 Open-Meteo 최신 기상·해양 예보 데이터를 사용합니다.',
+            isVirtual: false
+          },
+          {
+            id: 'past_1d',
+            labelKo: '1일 전 실황 데이터',
+            badgeKo: 'API 과거 24h',
+            descriptionKo: '동일 위치의 24시간 전 기상·해양 데이터를 불러와 비교 실험합니다.',
+            isVirtual: false
+          },
+          {
+            id: 'past_3d',
+            labelKo: '3일 전 실황 데이터',
+            badgeKo: 'API 과거 72h',
+            descriptionKo: '동일 위치의 72시간 전 기상·해양 데이터를 불러와 비교 실험합니다.',
+            isVirtual: false
+          },
+          {
+            id: 'virtual_strong_wind',
+            labelKo: '가상 시나리오: 강풍(+50%)',
+            badgeKo: '가상 대체 조건',
+            descriptionKo: '실시간 API 풍속에 ×1.5배를 적용한 가상 강풍 비교 실험입니다.',
+            isVirtual: true
+          },
+          {
+            id: 'virtual_calm_wind',
+            labelKo: '가상 시나리오: 무풍(해류 단독)',
+            badgeKo: '가상 대체 조건',
+            descriptionKo: '풍속을 0 m/s로 설정하여 해류·파랑만의 이동 기여도를 비교합니다.',
+            isVirtual: true
+          },
+          {
+            id: 'virtual_reverse_current',
+            labelKo: '가상 시나리오: 역방향 해류',
+            badgeKo: '가상 대체 조건',
+            descriptionKo: 'API 해류 방향을 180° 반전시킨 가상 대체 해류 조건입니다.',
+            isVirtual: true
+          }
+        ];
+
+        const BASEMAPS = {
+          dark: {
+            label: '해양 다크',
+            url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18
+          },
+          ocean: {
+            label: '해양 수심도',
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+            attribution: '&copy; Esri, GEBCO, NOAA',
+            maxZoom: 13
+          },
+          osm: {
+            label: '표준 지형',
+            url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18
+          }
+        };
+
+        /* =========================================================
+           2. Application State
+        ========================================================= */
+        let memorySavedFallback = [];
+
+        function loadSavedSimulations() {
+          try {
+            const raw = window.localStorage.getItem(STORAGE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (_e) {
+            return memorySavedFallback;
+          }
+        }
+
+        function persistSavedSimulations(list) {
+          memorySavedFallback = list;
+          try {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+          } catch (_e) {
+            // file:// protocol or quota restricted: keep in memory safely
+          }
+        }
+
+        const state = {
+          locationName: COASTAL_PRESETS[0].name,
+          originLat: COASTAL_PRESETS[0].lat,
+          originLng: COASTAL_PRESETS[0].lng,
+          debrisType: 'plastic_bottle',
+          debrisCount: 45,
+          durationHours: 24,
+          scenarioMode: 'realtime',
+          basemap: 'dark',
+          showLandMask: false,
+          showComparisonOnMap: true,
+          environment: null,
+          simulation: null,
+          isLoading: false,
+          errorMessage: null,
+          currentHour: 0,
+          isPlaying: false,
+          playbackSpeed: 2,
+          savedSimulations: loadSavedSimulations(),
+          comparisonId: null,
+          hoverProbe: null,
+          envHoverIdx: null,
+          distHoverIdx: null,
+          landPolygons: null,
+          landGeoJson: null,
+          soundEnabled: true,
+          soundPreview: false
+        };
+
+        let map = null;
+        let tileLayer = null;
+        let landLayer = null;
+        let searchTimer = null;
+        let lastFrameTime = null;
+        let rafHandle = null;
+        let fetchSerial = 0;
+
+        /* =========================================================
+           3. Land Mask (world-atlas 50m via CDN + Point-in-Polygon)
+        ========================================================= */
+        function normalizeLng(lng) {
+          let wrapped = (((lng + 180) % 360) + 360) % 360 - 180;
+          if (wrapped === -180 && lng > 0) wrapped = 180;
+          return wrapped;
+        }
+
+        function buildRingBBox(ring) {
+          let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+          for (let i = 0; i < ring.length; i++) {
+            const lng = ring[i][0];
+            const lat = ring[i][1];
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+          }
+          return { ring, minLng, maxLng, minLat, maxLat };
+        }
+
+        function pointInRing(lng, lat, rb) {
+          if (lng < rb.minLng || lng > rb.maxLng || lat < rb.minLat || lat > rb.maxLat) {
+            return false;
+          }
+          const ring = rb.ring;
+          let inside = false;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], yi = ring[i][1];
+            const xj = ring[j][0], yj = ring[j][1];
+            const intersect = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi + 1e-15) + xi;
+            if (intersect) inside = !inside;
+          }
+          return inside;
+        }
+
+        function isPointOnLand(lat, lng) {
+          if (lat < -85 || lat > 85) return lat < -80;
+          if (!state.landPolygons) return false;
+          const normLng = normalizeLng(lng);
+          const polys = state.landPolygons;
+          for (let i = 0; i < polys.length; i++) {
+            const poly = polys[i];
+            if (pointInRing(normLng, lat, poly.outer)) {
+              let inHole = false;
+              for (let h = 0; h < poly.holes.length; h++) {
+                if (pointInRing(normLng, lat, poly.holes[h])) {
+                  inHole = true;
+                  break;
+                }
+              }
+              if (!inHole) return true;
+            }
+          }
+          return false;
+        }
+
+        function findNearestOceanPoint(lat, lng, maxRadiusKm = 180) {
+          if (!isPointOnLand(lat, lng)) return { lat, lng };
+          const stepKm = 6;
+          const maxSteps = Math.ceil(maxRadiusKm / stepKm);
+          for (let step = 1; step <= maxSteps; step++) {
+            const distKm = step * stepKm;
+            for (let b = 0; b < 16; b++) {
+              const angle = (b / 16) * Math.PI * 2;
+              const dLat = (distKm / 111.32) * Math.cos(angle);
+              const cosLat = Math.max(0.15, Math.cos((lat * Math.PI) / 180));
+              const dLng = (distKm / (111.32 * cosLat)) * Math.sin(angle);
+              const testLat = Math.max(-80, Math.min(82, lat + dLat));
+              const testLng = normalizeLng(lng + dLng);
+              if (!isPointOnLand(testLat, testLng)) {
+                return { lat: Number(testLat.toFixed(4)), lng: Number(testLng.toFixed(4)) };
+              }
+            }
+          }
+          return null;
+        }
+
+        async function loadLandMaskData() {
+          if (typeof window.topojson === 'undefined') return;
+          const urls = [
+            'https://cdn.jsdelivr.net/npm/world-atlas@2/land-50m.json',
+            'https://unpkg.com/world-atlas@2/land-50m.json'
+          ];
+          for (const url of urls) {
+            try {
+              const res = await fetch(url);
+              if (!res.ok) continue;
+              const topo = await res.json();
+              const geo = window.topojson.feature(topo, topo.objects.land);
+              const indices = [];
+              const pushPoly = (coords) => {
+                if (!coords.length || coords[0].length < 3) return;
+                indices.push({
+                  outer: buildRingBBox(coords[0]),
+                  holes: coords.slice(1).filter((r) => r.length >= 3).map(buildRingBBox)
+                });
+              };
+              for (const feat of geo.features) {
+                if (!feat.geometry) continue;
+                if (feat.geometry.type === 'Polygon') pushPoly(feat.geometry.coordinates);
+                else if (feat.geometry.type === 'MultiPolygon') {
+                  for (const poly of feat.geometry.coordinates) pushPoly(poly);
+                }
+              }
+              state.landGeoJson = geo;
+              state.landPolygons = indices;
+              updateLocationCard();
+              if (state.environment) {
+                recomputeSimulation(false);
+              }
+              if (state.showLandMask && map) {
+                toggleLandLayer(true);
+              }
+              return;
+            } catch (_err) {
+              // try next CDN
+            }
+          }
+        }
+
+        /* =========================================================
+           4. Open-Meteo Weather, Marine & Geocoding API
+        ========================================================= */
+        function findClosestTimeIndex(times, targetIso) {
+          if (!times.length) return 0;
+          const targetHour = (targetIso || '').slice(0, 13);
+          const exactIdx = times.findIndex((t) => t.startsWith(targetHour));
+          if (exactIdx !== -1) return exactIdx;
+          const targetMs = Date.parse(targetIso);
+          if (Number.isNaN(targetMs)) return 0;
+          let bestIdx = 0, bestDiff = Infinity;
+          for (let i = 0; i < times.length; i++) {
+            const ms = Date.parse(times[i]);
+            if (!Number.isNaN(ms)) {
+              const diff = Math.abs(ms - targetMs);
+              if (diff < bestDiff) {
+                bestDiff = diff;
+                bestIdx = i;
+              }
+            }
+          }
+          return bestIdx;
+        }
+
+        function applyVirtualTransform(pt, mode) {
+          const copy = Object.assign({}, pt);
+          if (mode === 'virtual_strong_wind' && copy.windSpeedMs !== null) {
+            copy.windSpeedMs = Number((copy.windSpeedMs * 1.5).toFixed(2));
+          } else if (mode === 'virtual_calm_wind') {
+            copy.windSpeedMs = 0;
+          } else if (mode === 'virtual_reverse_current' && copy.currentDirToDeg !== null) {
+            copy.currentDirToDeg = (copy.currentDirToDeg + 180) % 360;
+          }
+          return copy;
+        }
+
+        async function fetchEnvironmentData(lat, lng, scenarioMode) {
+          const latFixed = Number(lat.toFixed(4));
+          const lngFixed = Number(lng.toFixed(4));
+
+          const wParams = new URLSearchParams({
+            latitude: String(latFixed),
+            longitude: String(lngFixed),
+            current: 'wind_speed_10m,wind_direction_10m,precipitation,rain,weather_code,cloud_cover',
+            hourly: 'wind_speed_10m,wind_direction_10m,precipitation,rain,weather_code,cloud_cover',
+            wind_speed_unit: 'ms',
+            past_days: '5',
+            forecast_days: '4',
+            timezone: 'auto'
+          });
+
+          const mParams = new URLSearchParams({
+            latitude: String(latFixed),
+            longitude: String(lngFixed),
+            current: 'wave_height,wave_direction,wave_period,ocean_current_velocity,ocean_current_direction',
+            hourly: 'wave_height,wave_direction,wave_period,ocean_current_velocity,ocean_current_direction',
+            past_days: '5',
+            forecast_days: '4',
+            timezone: 'auto'
+          });
+
+          const [wRes, mRes] = await Promise.allSettled([
+            fetch('https://api.open-meteo.com/v1/forecast?' + wParams.toString()),
+            fetch('https://marine-api.open-meteo.com/v1/marine?' + mParams.toString())
+          ]);
+
+          if (wRes.status === 'rejected' || !wRes.value.ok) {
+            throw new Error('Open-Meteo Weather API 연결에 실패했습니다. 네트워크 상태나 좌표를 확인 후 다시 시도해 주세요.');
+          }
+
+          const wJson = await wRes.value.json();
+          let mJson = null;
+          const notes = [];
+
+          if (mRes.status === 'fulfilled' && mRes.value.ok) {
+            mJson = await mRes.value.json();
+          } else {
+            notes.push('Open-Meteo Marine API 응답이 제한되거나 육지 격자로 판별되어 해양 데이터를 수집하지 못했습니다.');
+          }
+
+          const wTimes = (wJson.hourly && wJson.hourly.time) || [];
+          if (!wTimes.length) {
+            throw new Error('기상 API에서 시간별 풍속 데이터를 반환하지 않았습니다.');
+          }
+
+          const currentIso = (wJson.current && wJson.current.time) || wTimes[0];
+          const baseIdx = findClosestTimeIndex(wTimes, currentIso);
+          let offsetHours = 0;
+          if (scenarioMode === 'past_1d') offsetHours = -24;
+          if (scenarioMode === 'past_3d') offsetHours = -72;
+
+          const startIdx = Math.max(0, Math.min(wTimes.length - 73, baseIdx + offsetHours));
+          const referenceStartIso = wTimes[startIdx] || currentIso;
+
+          const mTimes = (mJson && mJson.hourly && mJson.hourly.time) || [];
+          const mTimeMap = new Map();
+          for (let i = 0; i < mTimes.length; i++) mTimeMap.set(mTimes[i], i);
+
+          let windRealCount = 0;
+          let currentRealCount = 0;
+          let waveRealCount = 0;
+          const hourly = [];
+          const maxSlice = Math.min(73, wTimes.length - startIdx);
+
+          for (let h = 0; h < maxSlice; h++) {
+            const wIdx = startIdx + h;
+            const tIso = wTimes[wIdx];
+            const mIdx = mTimeMap.get(tIso);
+
+            const wSpd = wJson.hourly.wind_speed_10m ? wJson.hourly.wind_speed_10m[wIdx] : null;
+            const wDir = wJson.hourly.wind_direction_10m ? wJson.hourly.wind_direction_10m[wIdx] : null;
+            const wCode = wJson.hourly.weather_code ? wJson.hourly.weather_code[wIdx] : null;
+            const wPrecip = wJson.hourly.precipitation ? wJson.hourly.precipitation[wIdx] : null;
+            const wRain = wJson.hourly.rain ? wJson.hourly.rain[wIdx] : null;
+            const wCloud = wJson.hourly.cloud_cover ? wJson.hourly.cloud_cover[wIdx] : null;
+            if (wSpd != null && wDir != null) windRealCount++;
+
+            const cKmh = mIdx !== undefined && mJson.hourly.ocean_current_velocity ? mJson.hourly.ocean_current_velocity[mIdx] : null;
+            const cDir = mIdx !== undefined && mJson.hourly.ocean_current_direction ? mJson.hourly.ocean_current_direction[mIdx] : null;
+            const cMs = cKmh != null ? Number((cKmh / 3.6).toFixed(3)) : null;
+            if (cMs != null && cDir != null) currentRealCount++;
+
+            const wvH = mIdx !== undefined && mJson.hourly.wave_height ? mJson.hourly.wave_height[mIdx] : null;
+            const wvDir = mIdx !== undefined && mJson.hourly.wave_direction ? mJson.hourly.wave_direction[mIdx] : null;
+            const wvPer = mIdx !== undefined && mJson.hourly.wave_period ? mJson.hourly.wave_period[mIdx] : null;
+            if (wvH != null && wvDir != null) waveRealCount++;
+
+            hourly.push(
+              applyVirtualTransform(
+                {
+                  timeIso: tIso,
+                  windSpeedMs: wSpd ?? null,
+                  windDirFromDeg: wDir ?? null,
+                  weatherCode: wCode ?? null,
+                  precipitationMm: wPrecip ?? null,
+                  rainMm: wRain ?? null,
+                  cloudCoverPct: wCloud ?? null,
+                  currentSpeedMs: cMs,
+                  currentSpeedKmh: cKmh ?? null,
+                  currentDirToDeg: cDir ?? null,
+                  waveHeightM: wvH ?? null,
+                  waveDirFromDeg: wvDir ?? null,
+                  wavePeriodS: wvPer ?? null
+                },
+                scenarioMode
+              )
+            );
+          }
+
+          const windStatus = windRealCount === hourly.length ? 'api_real' : windRealCount > 0 ? 'assumed_fallback' : 'unavailable';
+          const currentStatus = currentRealCount === hourly.length ? 'api_real' : currentRealCount > 0 ? 'assumed_fallback' : 'unavailable';
+          const waveStatus = waveRealCount === hourly.length ? 'api_real' : waveRealCount > 0 ? 'assumed_fallback' : 'unavailable';
+
+          if (currentStatus === 'unavailable') {
+            notes.push('선택한 좌표는 해양 모델(CMEMS) 해류 격자 밖이거나 연안 내만 구역으로 해류 실측/예보 데이터가 없습니다. 임의의 해류값을 생성하지 않고 해류 0 m/s로 계산하며 바람·파랑 영향만 반영합니다.');
+          } else if (currentStatus === 'assumed_fallback') {
+            notes.push('일부 시간대의 해류 데이터가 누락되어 인접 시간 값을 보간(추정값)하여 사용했습니다.');
+          }
+
+          if (waveStatus === 'unavailable') {
+            notes.push('선택한 좌표에서 파고·파향 데이터를 수신하지 못해 스토크스 파랑 표류(Stokes drift) 항은 0으로 처리되었습니다.');
+          }
+
+          const scenarioMeta = SCENARIO_OPTIONS.find((s) => s.id === scenarioMode) || SCENARIO_OPTIONS[0];
+          if (scenarioMeta.isVirtual) {
+            notes.push('[비교 실험용 가상 대체 조건] ' + scenarioMeta.descriptionKo);
+          }
+
+          const firstPt = hourly[0] || {};
+          const curWeather = wJson.current || {};
+          const curMarine = (mJson && mJson.current) || {};
+
+          const currentPt =
+            scenarioMode === 'realtime' && wJson.current
+              ? applyVirtualTransform(
+                  {
+                    timeIso: curWeather.time || referenceStartIso,
+                    windSpeedMs: curWeather.wind_speed_10m ?? firstPt.windSpeedMs ?? null,
+                    windDirFromDeg: curWeather.wind_direction_10m ?? firstPt.windDirFromDeg ?? null,
+                    weatherCode: curWeather.weather_code ?? firstPt.weatherCode ?? null,
+                    precipitationMm: curWeather.precipitation ?? firstPt.precipitationMm ?? null,
+                    rainMm: curWeather.rain ?? firstPt.rainMm ?? null,
+                    cloudCoverPct: curWeather.cloud_cover ?? firstPt.cloudCoverPct ?? null,
+                    currentSpeedMs:
+                      curMarine.ocean_current_velocity != null
+                        ? Number((curMarine.ocean_current_velocity / 3.6).toFixed(3))
+                        : firstPt.currentSpeedMs ?? null,
+                    currentSpeedKmh: curMarine.ocean_current_velocity ?? firstPt.currentSpeedKmh ?? null,
+                    currentDirToDeg: curMarine.ocean_current_direction ?? firstPt.currentDirToDeg ?? null,
+                    waveHeightM: curMarine.wave_height ?? firstPt.waveHeightM ?? null,
+                    waveDirFromDeg: curMarine.wave_direction ?? firstPt.waveDirFromDeg ?? null,
+                    wavePeriodS: curMarine.wave_period ?? firstPt.wavePeriodS ?? null
+                  },
+                  scenarioMode
+                )
+              : firstPt;
+
+          return {
+            requestLat: latFixed,
+            requestLng: lngFixed,
+            weatherGridLat: wJson.latitude ?? null,
+            weatherGridLng: wJson.longitude ?? null,
+            marineGridLat: mJson ? mJson.latitude ?? null : null,
+            marineGridLng: mJson ? mJson.longitude ?? null : null,
+            timezone: wJson.timezone || 'UTC',
+            fetchedAtIso: new Date().toISOString(),
+            referenceStartIso,
+            scenarioMode,
+            scenarioLabelKo: scenarioMeta.labelKo,
+            isVirtualModified: scenarioMeta.isVirtual,
+            weatherSource: 'Open-Meteo Weather API (ECMWF/GFS)',
+            marineSource: 'Open-Meteo Marine API (CMEMS/Global Wave)',
+            fieldStatuses: { wind: windStatus, oceanCurrent: currentStatus, wave: waveStatus },
+            notes,
+            current: currentPt,
+            hourly
+          };
+        }
+
+        async function searchLocations(query) {
+          const trimmed = query.trim();
+          if (!trimmed) return [];
+          const lower = trimmed.toLowerCase();
+          const presetMatches = COASTAL_PRESETS.filter(
+            (p) => p.name.toLowerCase().includes(lower) || p.detail.toLowerCase().includes(lower)
+          );
+
+          const coordMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*[,/\s]\s*(-?\d+(?:\.\d+)?)$/);
+          if (coordMatch) {
+            const lat = Number(coordMatch[1]);
+            const lng = Number(coordMatch[2]);
+            if (lat >= -85 && lat <= 85 && lng >= -180 && lng <= 180) {
+              return [
+                {
+                  id: 'coord',
+                  name: `직접 입력 좌표 (${lat.toFixed(3)}°, ${lng.toFixed(3)}°)`,
+                  detail: '사용자 지정 위도·경도 좌표',
+                  lat,
+                  lng
+                },
+                ...presetMatches
+              ];
+            }
+          }
+
+          try {
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=6&language=ko&format=json`;
+            const res = await fetch(url);
+            if (!res.ok) return presetMatches;
+            const data = await res.json();
+            const apiResults = (data.results || []).map((item) => ({
+              id: 'om-' + item.id,
+              name: item.name,
+              detail: [item.admin1, item.country].filter(Boolean).join(' · ') || `${item.latitude.toFixed(2)}°, ${item.longitude.toFixed(2)}°`,
+              lat: Number(item.latitude.toFixed(4)),
+              lng: Number(item.longitude.toFixed(4))
+            }));
+            return [...presetMatches, ...apiResults].slice(0, 8);
+          } catch (_e) {
+            return presetMatches;
+          }
+        }
+
+        /* =========================================================
+           5. 2D Vector Summation Drift Physics Engine
+        ========================================================= */
+        function degToRad(deg) {
+          return (deg * Math.PI) / 180;
+        }
+        function radToDeg(rad) {
+          return (rad * 180) / Math.PI;
+        }
+
+        function haversineKm(lat1, lng1, lat2, lng2) {
+          const dLat = degToRad(lat2 - lat1);
+          const dLng = degToRad(lng2 - lng1);
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(degToRad(lat1)) * Math.cos(degToRad(lat2)) * Math.sin(dLng / 2) ** 2;
+          return (EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) / 1000;
+        }
+
+        function bearingBetweenDeg(lat1, lng1, lat2, lng2) {
+          const phi1 = degToRad(lat1), phi2 = degToRad(lat2);
+          const dL = degToRad(lng2 - lng1);
+          const y = Math.sin(dL) * Math.cos(phi2);
+          const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dL);
+          return (radToDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+
+        function formatCompassKo(deg) {
+          if (deg == null || Number.isNaN(deg)) return '-';
+          const dirs = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
+          return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+        }
+
+        function createSeededRng(seed) {
+          let a = seed >>> 0;
+          return function () {
+            a |= 0;
+            a = (a + 0x6d2b79f5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        function boxMullerNormal(rng) {
+          return Math.sqrt(-2.0 * Math.log(Math.max(1e-7, rng()))) * Math.cos(2.0 * Math.PI * rng());
+        }
+
+        function envPointToVectors(pt, profile) {
+          let windU = 0, windV = 0;
+          if (pt.windSpeedMs !== null && pt.windDirFromDeg !== null) {
+            const rad = degToRad((pt.windDirFromDeg + 180) % 360);
+            const eff = pt.windSpeedMs * profile.windageCoeff;
+            windU = eff * Math.sin(rad);
+            windV = eff * Math.cos(rad);
+          }
+
+          let curU = 0, curV = 0;
+          if (pt.currentSpeedMs !== null && pt.currentDirToDeg !== null) {
+            const rad = degToRad(pt.currentDirToDeg);
+            const eff = pt.currentSpeedMs * profile.currentCoupling;
+            curU = eff * Math.sin(rad);
+            curV = eff * Math.cos(rad);
+          }
+
+          let stU = 0, stV = 0;
+          if (pt.waveHeightM !== null && pt.waveDirFromDeg !== null && pt.waveHeightM > 0) {
+            const tp = Math.max(2.5, pt.wavePeriodS || 5.0);
+            const rawStokes = (Math.PI ** 3 * pt.waveHeightM ** 2) / (9.81 * tp ** 3);
+            const spd = Math.min(0.15, rawStokes) * profile.stokesFactor;
+            const rad = degToRad((pt.waveDirFromDeg + 180) % 360);
+            stU = spd * Math.sin(rad);
+            stV = spd * Math.cos(rad);
+          }
+
+          return { u: windU + curU + stU, v: windV + curV + stV };
+        }
+
+        function fillEnvSeries(hourly) {
+          const copy = hourly.map((p) => Object.assign({}, p));
+          const keys = ['windSpeedMs', 'windDirFromDeg', 'currentSpeedMs', 'currentSpeedKmh', 'currentDirToDeg', 'waveHeightM', 'waveDirFromDeg', 'wavePeriodS'];
+          for (const k of keys) {
+            let last = null;
+            for (let i = 0; i < copy.length; i++) {
+              if (typeof copy[i][k] === 'number') last = copy[i][k];
+              else if (last !== null) copy[i][k] = last;
+            }
+            let next = null;
+            for (let i = copy.length - 1; i >= 0; i--) {
+              if (typeof copy[i][k] === 'number') next = copy[i][k];
+              else if (next !== null) copy[i][k] = next;
+            }
+          }
+          return copy;
+        }
+
+        function interpVec(series, hourFloat, profile) {
+          if (!series.length) return { u: 0, v: 0 };
+          const idx0 = Math.min(series.length - 1, Math.max(0, Math.floor(hourFloat)));
+          const idx1 = Math.min(series.length - 1, idx0 + 1);
+          const frac = hourFloat - idx0;
+          const v0 = envPointToVectors(series[idx0], profile);
+          const v1 = envPointToVectors(series[idx1], profile);
+          return { u: v0.u + (v1.u - v0.u) * frac, v: v0.v + (v1.v - v0.v) * frac };
+        }
+
+        function runCoreSimulation(originLat, originLng, originOnLand, debrisType, debrisCount, durationHours, series) {
+          const profile = DEBRIS_MAP[debrisType];
+          const subSteps = 4;
+          const dtSec = 3600 / subSteps;
+          const seedBase = Math.round((originLat + 90) * 1000) * 73856093 + Math.round((originLng + 180) * 1000) * 19349663;
+          const tracks = [];
+
+          for (let p = 0; p < debrisCount; p++) {
+            const rng = createSeededRng(seedBase + p * 83492791 + debrisType.length * 997);
+            const initLat = debrisCount > 1 ? (boxMullerNormal(rng) * 80) / 111320 : 0;
+            const initLng = debrisCount > 1 ? (boxMullerNormal(rng) * 80) / (111320 * Math.max(0.2, Math.cos(degToRad(originLat)))) : 0;
+            let lat = Math.max(-84, Math.min(84, originLat + initLat));
+            let lng = normalizeLng(originLng + initLng);
+            let beached = false;
+            let beachedAtHour = null;
+            let pathDistKm = 0;
+            const pWindFactor = 1 + (debrisCount > 1 ? boxMullerNormal(rng) * 0.08 : 0);
+            const points = [{ hour: 0, lat, lng, beached: false }];
+
+            for (let h = 0; h < durationHours; h++) {
+              for (let s = 0; s < subSteps; s++) {
+                if (beached) break;
+                const mv = interpVec(series, h + s / subSteps, profile);
+                const eddyU = debrisCount > 1 ? boxMullerNormal(rng) * profile.eddyDiffusionMs : 0;
+                const eddyV = debrisCount > 1 ? boxMullerNormal(rng) * profile.eddyDiffusionMs : 0;
+                const u = mv.u * pWindFactor + eddyU;
+                const v = mv.v * pWindFactor + eddyV;
+
+                const dLat = radToDeg((v * dtSec) / EARTH_RADIUS_M);
+                const cosLat = Math.max(0.15, Math.cos(degToRad(lat)));
+                const dLng = radToDeg((u * dtSec) / (EARTH_RADIUS_M * cosLat));
+                const nextLat = Math.max(-84, Math.min(84, lat + dLat));
+                const nextLng = normalizeLng(lng + dLng);
+
+                if (!originOnLand && isPointOnLand(nextLat, nextLng)) {
+                  beached = true;
+                  beachedAtHour = Number((h + (s + 1) / subSteps).toFixed(2));
+                  pathDistKm += haversineKm(lat, lng, nextLat, nextLng);
+                  lat = nextLat;
+                  lng = nextLng;
+                  break;
+                }
+                pathDistKm += haversineKm(lat, lng, nextLat, nextLng);
+                lat = nextLat;
+                lng = nextLng;
+              }
+              points.push({ hour: h + 1, lat, lng, beached });
+            }
+
+            tracks.push({ id: p, points, beached, beachedAtHour, finalLat: lat, finalLng: lng, totalDistanceKm: pathDistKm });
+          }
+
+          const steps = [];
+          let prevLat = originLat, prevLng = originLng, cumKm = 0;
+          for (let h = 0; h <= durationHours; h++) {
+            let sumLat = 0, sumLng = 0, active = 0, beachedCnt = 0;
+            for (let p = 0; p < tracks.length; p++) {
+              const pt = tracks[p].points[h];
+              sumLat += pt.lat;
+              sumLng += pt.lng;
+              if (pt.beached) beachedCnt++;
+              else active++;
+            }
+            const meanLat = sumLat / tracks.length;
+            const meanLng = sumLng / tracks.length;
+            if (h > 0) cumKm += haversineKm(prevLat, prevLng, meanLat, meanLng);
+            const envPt = series[Math.min(series.length - 1, h)];
+            const vec = envPt ? envPointToVectors(envPt, profile) : { u: 0, v: 0 };
+
+            steps.push({
+              hour: h,
+              timeIso: envPt ? envPt.timeIso : '',
+              meanLat,
+              meanLng,
+              cumulativeDistanceKm: Number(cumKm.toFixed(3)),
+              netDisplacementKm: Number(haversineKm(originLat, originLng, meanLat, meanLng).toFixed(3)),
+              instantSpeedMs: Number(Math.hypot(vec.u, vec.v).toFixed(3)),
+              activeCount: active,
+              beachedCount: beachedCnt,
+              windSpeedMs: envPt ? envPt.windSpeedMs : null,
+              windDirFromDeg: envPt ? envPt.windDirFromDeg : null,
+              weatherCode: envPt ? envPt.weatherCode : null,
+              precipitationMm: envPt ? envPt.precipitationMm : null,
+              rainMm: envPt ? envPt.rainMm : null,
+              cloudCoverPct: envPt ? envPt.cloudCoverPct : null,
+              currentSpeedMs: envPt ? envPt.currentSpeedMs : null,
+              currentDirToDeg: envPt ? envPt.currentDirToDeg : null,
+              waveHeightM: envPt ? envPt.waveHeightM : null
+            });
+            prevLat = meanLat;
+            prevLng = meanLng;
+          }
+
+          const last = steps[steps.length - 1];
+          const beachedList = tracks.filter((t) => t.beached);
+          return {
+            tracks,
+            steps,
+            meanFinalLat: last.meanLat,
+            meanFinalLng: last.meanLng,
+            totalMeanPathKm: Number((tracks.reduce((a, t) => a + t.totalDistanceKm, 0) / tracks.length).toFixed(2)),
+            totalNetDistanceKm: Number(haversineKm(originLat, originLng, last.meanLat, last.meanLng).toFixed(2)),
+            meanBearingDeg: Number(bearingBetweenDeg(originLat, originLng, last.meanLat, last.meanLng).toFixed(1)),
+            beachedParticleCount: beachedList.length,
+            firstBeachingHour: beachedList.length ? Math.min(...beachedList.map((t) => t.beachedAtHour)) : null
+          };
+        }
+
+        function runDriftSimulation() {
+          const env = state.environment;
+          if (!env) return null;
+          const originOnLand = isPointOnLand(state.originLat, state.originLng);
+          const series = fillEnvSeries(env.hourly);
+
+          const primary = runCoreSimulation(
+            state.originLat,
+            state.originLng,
+            originOnLand,
+            state.debrisType,
+            state.debrisCount,
+            state.durationHours,
+            series
+          );
+
+          const debrisComparison = DEBRIS_LIST.map((profile) => {
+            const sampleCnt = Math.min(25, Math.max(10, state.debrisCount));
+            const sim =
+              profile.id === state.debrisType
+                ? primary
+                : runCoreSimulation(state.originLat, state.originLng, originOnLand, profile.id, sampleCnt, state.durationHours, series);
+            return {
+              debrisType: profile.id,
+              nameKo: profile.nameKo,
+              windageCoeff: profile.windageCoeff,
+              pathDistanceKm: sim.totalMeanPathKm,
+              bearingDeg: sim.meanBearingDeg,
+              beachedRatio: profile.id === state.debrisType ? primary.beachedParticleCount / state.debrisCount : sim.beachedParticleCount / sampleCnt,
+              colorHex: profile.colorHex
+            };
+          });
+
+          const usedAssumedData =
+            env.isVirtualModified ||
+            env.fieldStatuses.wind !== 'api_real' ||
+            env.fieldStatuses.oceanCurrent !== 'api_real' ||
+            env.fieldStatuses.wave !== 'api_real';
+
+          return {
+            id: 'sim-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            createdAtIso: new Date().toISOString(),
+            locationName: state.locationName,
+            originLat: state.originLat,
+            originLng: state.originLng,
+            originOnLand,
+            debrisType: state.debrisType,
+            debrisCount: state.debrisCount,
+            durationHours: state.durationHours,
+            environment: env,
+            ...primary,
+            usedAssumedData,
+            debrisComparison
+          };
+        }
+
+        /* =========================================================
+           6. Leaflet Map & Synchronized HTML5 Canvas Drawing
+        ========================================================= */
+        function initMap() {
+          if (typeof window.L === 'undefined') {
+            showError('Leaflet 지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
+            return;
+          }
+
+          map = window.L.map('ocean-map', {
+            center: [state.originLat, state.originLng],
+            zoom: 9,
+            zoomControl: false,
+            worldCopyJump: true
+          });
+
+          const cfg = BASEMAPS[state.basemap];
+          tileLayer = window.L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: cfg.maxZoom }).addTo(map);
+
+          map.on('click', (e) => {
+            const w = e.latlng.wrap();
+            const lat = Number(w.lat.toFixed(4));
+            const lng = Number(w.lng.toFixed(4));
+            selectLocation(lat, lng, `지도 선택 지점 (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`);
+          });
+
+          map.on('mousemove', (e) => {
+            const w = e.latlng.wrap();
+            state.hoverProbe = {
+              lat: Number(w.lat.toFixed(4)),
+              lng: Number(w.lng.toFixed(4)),
+              onLand: isPointOnLand(w.lat, w.lng)
+            };
+            renderCursorProbe();
+          });
+
+          map.on('mouseout', () => {
+            state.hoverProbe = null;
+            renderCursorProbe();
+          });
+
+          map.on('move zoom resize viewreset', drawParticleCanvas);
+          drawParticleCanvas();
+        }
+
+        function switchBasemap(id) {
+          state.basemap = id;
+          if (map && window.L) {
+            if (tileLayer) map.removeLayer(tileLayer);
+            const cfg = BASEMAPS[id];
+            tileLayer = window.L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: cfg.maxZoom }).addTo(map);
+          }
+          renderBasemapButtons();
+        }
+
+        function toggleLandLayer(forceVal) {
+          state.showLandMask = typeof forceVal === 'boolean' ? forceVal : !state.showLandMask;
+          const btn = document.getElementById('btn-toggle-land');
+          btn.classList.toggle('active', state.showLandMask);
+
+          if (!map || !window.L) return;
+          if (state.showLandMask && state.landGeoJson) {
+            if (!landLayer) {
+              landLayer = window.L.geoJSON(state.landGeoJson, {
+                interactive: false,
+                style: { color: '#22D3EE', weight: 1, opacity: 0.45, fillColor: '#0F2544', fillOpacity: 0.22 }
+              });
+            }
+            landLayer.addTo(map);
+          } else if (landLayer) {
+            map.removeLayer(landLayer);
+          }
+        }
+
+        function drawParticleCanvas() {
+          const canvas = document.getElementById('particle-canvas');
+          if (!map || !canvas || !window.L) return;
+
+          const size = map.getSize();
+          const dpr = window.devicePixelRatio || 1;
+          if (canvas.width !== Math.round(size.x * dpr) || canvas.height !== Math.round(size.y * dpr)) {
+            canvas.width = Math.round(size.x * dpr);
+            canvas.height = Math.round(size.y * dpr);
+            canvas.style.width = size.x + 'px';
+            canvas.style.height = size.y + 'px';
+          }
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, size.x, size.y);
+
+          const toPt = (lat, lng) => map.latLngToContainerPoint(window.L.latLng(lat, lng));
+
+          // 1. Comparison trajectory
+          const compEntry = state.savedSimulations.find((s) => s.id === state.comparisonId);
+          const comp = compEntry ? compEntry.result : null;
+          if (comp && state.showComparisonOnMap && comp.steps.length > 0) {
+            ctx.save();
+            ctx.beginPath();
+            comp.steps.forEach((st, idx) => {
+              const pt = toPt(st.meanLat, st.meanLng);
+              if (idx === 0) ctx.moveTo(pt.x, pt.y);
+              else ctx.lineTo(pt.x, pt.y);
+            });
+            ctx.setLineDash([6, 5]);
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = 2.2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const lastSt = comp.steps[comp.steps.length - 1];
+            const endPt = toPt(lastSt.meanLat, lastSt.meanLng);
+            ctx.fillStyle = '#F59E0B';
+            ctx.beginPath();
+            ctx.arc(endPt.x, endPt.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#060D1A';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.font = '600 11px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
+            ctx.fillStyle = '#FCD34D';
+            ctx.fillText(`비교 (${comp.totalNetDistanceKm.toFixed(1)} km)`, endPt.x + 8, endPt.y + 4);
+            ctx.restore();
+          }
+
+          // 2. Active simulation tracks
+          const sim = state.simulation;
+          if (sim && sim.tracks.length > 0) {
+            const profile = DEBRIS_MAP[sim.debrisType];
+            const maxH = Math.min(sim.durationHours, Math.max(0, state.currentHour));
+            const h0 = Math.floor(maxH);
+            const h1 = Math.min(sim.durationHours, h0 + 1);
+            const frac = maxH - h0;
+
+            // Faint full-period path
+            ctx.save();
+            ctx.beginPath();
+            sim.steps.forEach((st, idx) => {
+              const pt = toPt(st.meanLat, st.meanLng);
+              if (idx === 0) ctx.moveTo(pt.x, pt.y);
+              else ctx.lineTo(pt.x, pt.y);
+            });
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 4]);
+            ctx.stroke();
+            ctx.restore();
+
+            // Particle trails
+            const alpha = sim.tracks.length > 80 ? 0.16 : sim.tracks.length > 25 ? 0.28 : 0.45;
+            ctx.save();
+            ctx.strokeStyle = profile.colorHex;
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = 1.1;
+            for (let i = 0; i < sim.tracks.length; i++) {
+              const track = sim.tracks[i];
+              ctx.beginPath();
+              for (let h = 0; h <= h0; h++) {
+                const pt = track.points[h];
+                const cp = toPt(pt.lat, pt.lng);
+                if (h === 0) ctx.moveTo(cp.x, cp.y);
+                else ctx.lineTo(cp.x, cp.y);
+              }
+              if (frac > 0 && h1 > h0) {
+                const p0 = track.points[h0], p1 = track.points[h1];
+                const cp = toPt(p0.lat + (p1.lat - p0.lat) * frac, p0.lng + (p1.lng - p0.lng) * frac);
+                ctx.lineTo(cp.x, cp.y);
+              }
+              ctx.stroke();
+            }
+            ctx.restore();
+
+            // Active mean track
+            ctx.save();
+            ctx.beginPath();
+            for (let h = 0; h <= h0; h++) {
+              const cp = toPt(sim.steps[h].meanLat, sim.steps[h].meanLng);
+              if (h === 0) ctx.moveTo(cp.x, cp.y);
+              else ctx.lineTo(cp.x, cp.y);
+            }
+            if (frac > 0 && h1 > h0) {
+              const s0 = sim.steps[h0], s1 = sim.steps[h1];
+              const cp = toPt(s0.meanLat + (s1.meanLat - s0.meanLat) * frac, s0.meanLng + (s1.meanLng - s0.meanLng) * frac);
+              ctx.lineTo(cp.x, cp.y);
+            }
+            ctx.strokeStyle = '#E0F2FE';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.restore();
+
+            // Particle dots
+            for (let i = 0; i < sim.tracks.length; i++) {
+              const tr = sim.tracks[i];
+              const p0 = tr.points[h0], p1 = tr.points[h1];
+              const lat = p0.lat + (p1.lat - p0.lat) * frac;
+              const lng = p0.lng + (p1.lng - p0.lng) * frac;
+              const beachedNow = tr.beached && tr.beachedAtHour !== null && maxH >= tr.beachedAtHour;
+              const pt = toPt(lat, lng);
+
+              if (beachedNow) {
+                ctx.fillStyle = '#FB7185';
+                ctx.strokeStyle = '#060D1A';
+                ctx.lineWidth = 1.2;
+                ctx.fillRect(pt.x - 3.5, pt.y - 3.5, 7, 7);
+                ctx.strokeRect(pt.x - 3.5, pt.y - 3.5, 7, 7);
+              } else {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, sim.tracks.length === 1 ? 5.5 : 3.2, 0, Math.PI * 2);
+                ctx.fillStyle = profile.colorHex;
+                ctx.fill();
+                ctx.strokeStyle = '#060D1A';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+              }
+            }
+
+            // Mean centroid ring
+            const s0 = sim.steps[h0], s1 = sim.steps[h1];
+            const meanPt = toPt(s0.meanLat + (s1.meanLat - s0.meanLat) * frac, s0.meanLng + (s1.meanLng - s0.meanLng) * frac);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(meanPt.x, meanPt.y, 7, 0, Math.PI * 2);
+            ctx.strokeStyle = '#22D3EE';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(meanPt.x, meanPt.y, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+            ctx.restore();
+
+            // Final target dashed ring
+            const fSt = sim.steps[sim.steps.length - 1];
+            const fPt = toPt(fSt.meanLat, fSt.meanLng);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(fPt.x, fPt.y, 9, 0, Math.PI * 2);
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = 'rgba(224, 242, 254, 0.65)';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // 3. Origin marker
+          const origPt = toPt(state.originLat, state.originLng);
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(origPt.x, origPt.y, 10, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+          ctx.fill();
+          ctx.strokeStyle = '#22D3EE';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(origPt.x, origPt.y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fill();
+          ctx.font = '600 11px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
+          ctx.fillStyle = '#E0F2FE';
+          ctx.fillText('발생 지점', origPt.x + 13, origPt.y + 4);
+          ctx.restore();
+        }
+
+        function fitMapToTrajectory() {
+          if (!map || !window.L) return;
+          const pts = [[state.originLat, state.originLng]];
+          if (state.simulation) state.simulation.steps.forEach((s) => pts.push([s.meanLat, s.meanLng]));
+          const compEntry = state.savedSimulations.find((s) => s.id === state.comparisonId);
+          if (compEntry && state.showComparisonOnMap) {
+            compEntry.result.steps.forEach((s) => pts.push([s.meanLat, s.meanLng]));
+          }
+          if (pts.length <= 1) {
+            map.setView([state.originLat, state.originLng], 9, { animate: true });
+          } else {
+            map.fitBounds(window.L.latLngBounds(pts).pad(0.35), { maxZoom: 12, animate: true });
+          }
+        }
+
+        /* =========================================================
+           7. Weather-Responsive Web Audio Soundscape + Animation Loop
+        ========================================================= */
+        function describeWeather(step) {
+          if (!step) return { label: '날씨 정보 없음', mood: 'calm' };
+          const code = step.weatherCode;
+          const rain = Math.max(step.rainMm || 0, step.precipitationMm || 0);
+          const wind = step.windSpeedMs || 0;
+          const cloud = step.cloudCoverPct;
+
+          if (code !== null && code >= 95) return { label: `뇌우·강풍 (${rain.toFixed(1)} mm/h)`, mood: 'storm' };
+          if (rain >= 2.5 || (code !== null && [63, 65, 81, 82].includes(code))) return { label: `강한 비 (${rain.toFixed(1)} mm/h)`, mood: 'rain' };
+          if (rain > 0.05 || (code !== null && [51, 53, 55, 56, 57, 61, 66, 67, 80].includes(code))) return { label: `비 (${rain.toFixed(1)} mm/h)`, mood: 'rain' };
+          if (code !== null && [71, 73, 75, 77, 85, 86].includes(code)) return { label: '눈·한랭 해상', mood: 'windy' };
+          if (code !== null && [45, 48].includes(code)) return { label: '해무·안개', mood: 'windy' };
+          if (wind >= 9.0) return { label: `강풍 (${wind.toFixed(1)} m/s)`, mood: 'windy' };
+          if (code !== null && code <= 1) return { label: '맑음 · 화창함', mood: 'sunny' };
+          if (code !== null && code === 2) return { label: '구름 조금 · 화창함', mood: 'sunny' };
+          if (cloud !== null && cloud < 35) return { label: '맑음 · 화창함', mood: 'sunny' };
+          return { label: '구름 많음 · 흐림', mood: 'cloudy' };
+        }
+
+        const WeatherAudio = (function () {
+          let ctx = null;
+          let masterGain = null;
+          let windGain = null;
+          let windFilter = null;
+          let rainGain = null;
+          let waveGain = null;
+          let waveFilter = null;
+          let chimeTimer = null;
+          let dropTimer = null;
+          let activeMood = 'calm';
+          let activeRain = 0;
+          let isActive = false;
+
+          function createPinkNoiseBuffer(audioCtx, seconds) {
+            const sampleRate = audioCtx.sampleRate;
+            const length = Math.floor(sampleRate * seconds);
+            const buffer = audioCtx.createBuffer(1, length, sampleRate);
+            const data = buffer.getChannelData(0);
+            let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+            for (let i = 0; i < length; i++) {
+              const white = Math.random() * 2 - 1;
+              b0 = 0.99886 * b0 + white * 0.0555179;
+              b1 = 0.99332 * b1 + white * 0.0750759;
+              b2 = 0.96900 * b2 + white * 0.1538520;
+              b3 = 0.86650 * b3 + white * 0.3104856;
+              b4 = 0.55000 * b4 + white * 0.5329522;
+              b5 = -0.7616 * b5 - white * 0.0168980;
+              data[i] = Math.max(-0.95, Math.min(0.95, (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.28));
+              b6 = white * 0.115926;
+            }
+            return buffer;
+          }
+
+          function createWhiteNoiseBuffer(audioCtx, seconds) {
+            const sampleRate = audioCtx.sampleRate;
+            const length = Math.floor(sampleRate * seconds);
+            const buffer = audioCtx.createBuffer(1, length, sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < length; i++) {
+              data[i] = (Math.random() * 2 - 1) * 0.28;
+            }
+            return buffer;
+          }
+
+          function playSunnyChime() {
+            if (!ctx || ctx.state !== 'running' || !isActive || activeMood !== 'sunny') return;
+            const sunnyNotes = [523.25, 587.33, 659.25, 783.99, 987.77, 1174.66];
+            const now = ctx.currentTime;
+            const freq = sunnyNotes[Math.floor(Math.random() * sunnyNotes.length)];
+            const osc = ctx.createOscillator();
+            const osc2 = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sine';
+            osc2.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now);
+            osc2.frequency.setValueAtTime(freq * 1.5, now);
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.exponentialRampToValueAtTime(0.11, now + 0.12);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 2.1);
+            osc.connect(g);
+            osc2.connect(g);
+            g.connect(masterGain);
+            osc.start(now);
+            osc2.start(now);
+            osc.stop(now + 2.2);
+            osc2.stop(now + 2.2);
+          }
+
+          function playRainDrop() {
+            if (!ctx || ctx.state !== 'running' || !isActive || (activeMood !== 'rain' && activeMood !== 'storm')) return;
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            const baseF = 900 + Math.random() * 1100;
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(baseF, now);
+            osc.frequency.exponentialRampToValueAtTime(baseF * 1.38, now + 0.055);
+            const vol = Math.min(0.14, 0.05 + activeRain * 0.015);
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.exponentialRampToValueAtTime(vol, now + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
+            osc.connect(g);
+            g.connect(masterGain);
+            osc.start(now);
+            osc.stop(now + 0.09);
+          }
+
+          function ensureGraph() {
+            if (ctx) return true;
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return false;
+            ctx = new AudioCtx();
+
+            const compressor = ctx.createDynamicsCompressor();
+            compressor.threshold.value = -14;
+            compressor.knee.value = 18;
+            compressor.ratio.value = 4;
+            compressor.connect(ctx.destination);
+
+            masterGain = ctx.createGain();
+            masterGain.gain.value = 0.0001;
+            masterGain.connect(compressor);
+
+            const pinkBuf = createPinkNoiseBuffer(ctx, 4.0);
+            const whiteBuf = createWhiteNoiseBuffer(ctx, 3.0);
+
+            // 1. Wind layer (bandpass sweeping pink noise)
+            const windSrc = ctx.createBufferSource();
+            windSrc.buffer = pinkBuf;
+            windSrc.loop = true;
+            windFilter = ctx.createBiquadFilter();
+            windFilter.type = 'bandpass';
+            windFilter.frequency.value = 420;
+            windFilter.Q.value = 1.4;
+            const windLfo = ctx.createOscillator();
+            windLfo.frequency.value = 0.24;
+            const windLfoGain = ctx.createGain();
+            windLfoGain.gain.value = 160;
+            windLfo.connect(windLfoGain);
+            windLfoGain.connect(windFilter.frequency);
+            windGain = ctx.createGain();
+            windGain.gain.value = 0.0;
+            windSrc.connect(windFilter);
+            windFilter.connect(windGain);
+            windGain.connect(masterGain);
+            windSrc.start();
+            windLfo.start();
+
+            // 2. Rain layer (crisp white noise filtered to rainfall band)
+            const rainSrc = ctx.createBufferSource();
+            rainSrc.buffer = whiteBuf;
+            rainSrc.loop = true;
+            const rainHp = ctx.createBiquadFilter();
+            rainHp.type = 'highpass';
+            rainHp.frequency.value = 950;
+            const rainLp = ctx.createBiquadFilter();
+            rainLp.type = 'lowpass';
+            rainLp.frequency.value = 4800;
+            rainGain = ctx.createGain();
+            rainGain.gain.value = 0.0;
+            rainSrc.connect(rainHp);
+            rainHp.connect(rainLp);
+            rainLp.connect(rainGain);
+            rainGain.connect(masterGain);
+            rainSrc.start();
+
+            // 3. Ocean wave swell layer (slow LFO lowpass pink noise)
+            const waveSrc = ctx.createBufferSource();
+            waveSrc.buffer = pinkBuf;
+            waveSrc.loop = true;
+            waveFilter = ctx.createBiquadFilter();
+            waveFilter.type = 'lowpass';
+            waveFilter.frequency.value = 320;
+            const waveLfo = ctx.createOscillator();
+            waveLfo.frequency.value = 0.16;
+            const waveLfoGain = ctx.createGain();
+            waveLfoGain.gain.value = 0.16;
+            waveGain = ctx.createGain();
+            waveGain.gain.value = 0.28;
+            waveLfo.connect(waveLfoGain);
+            waveLfoGain.connect(waveGain.gain);
+            waveSrc.connect(waveFilter);
+            waveFilter.connect(waveGain);
+            waveGain.connect(masterGain);
+            waveSrc.start();
+            waveLfo.start();
+
+            chimeTimer = window.setInterval(playSunnyChime, 1600);
+            dropTimer = window.setInterval(playRainDrop, 210);
+
+            return true;
+          }
+
+          function update(step, shouldPlay, fromUserGesture) {
+            if (!shouldPlay) {
+              isActive = false;
+              if (ctx && masterGain) {
+                masterGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.12);
+              }
+              return;
+            }
+            // Only create AudioContext on an explicit user gesture (or if already created)
+            if (!ctx && !fromUserGesture) return;
+            if (!ensureGraph()) return;
+            if (ctx.state === 'suspended') {
+              if (fromUserGesture) {
+                ctx.resume().then(() => {
+                  if (isActive && activeMood === 'sunny') playSunnyChime();
+                  renderSoundButton();
+                }).catch(() => {});
+              } else {
+                return;
+              }
+            }
+
+            const prevMood = activeMood;
+            const wasActive = isActive;
+            isActive = true;
+
+            const now = ctx.currentTime;
+            const wind = Math.max(0, step && step.windSpeedMs !== null ? step.windSpeedMs : 4);
+            const rain = Math.max(0, step ? Math.max(step.rainMm || 0, step.precipitationMm || 0) : 0);
+            const wave = Math.max(0.25, step && step.waveHeightM !== null ? step.waveHeightM : 0.7);
+            const info = describeWeather(step);
+            activeMood = info.mood;
+            activeRain = rain;
+
+            const wNorm = Math.min(1, wind / 15);
+            windFilter.frequency.setTargetAtTime(240 + wNorm * 720, now, 0.2);
+            windGain.gain.setTargetAtTime(0.18 + wNorm * 0.55, now, 0.2);
+
+            const rNorm = info.mood === 'rain' || info.mood === 'storm' ? Math.min(1, Math.max(0.4, rain / 4.0)) : 0;
+            rainGain.gain.setTargetAtTime(rNorm * 0.75, now, 0.2);
+
+            const waveNorm = Math.min(1, wave / 3.0);
+            waveFilter.frequency.setTargetAtTime(260 + waveNorm * 280, now, 0.25);
+            waveGain.gain.setTargetAtTime(0.26 + waveNorm * 0.34, now, 0.25);
+
+            masterGain.gain.setTargetAtTime(0.88, now, 0.12);
+
+            // Trigger immediate sunny chime on start or mood transition
+            if ((!wasActive || prevMood !== 'sunny') && activeMood === 'sunny' && ctx.state === 'running') {
+              playSunnyChime();
+            }
+          }
+
+          function isRunning() {
+            return Boolean(ctx && ctx.state === 'running');
+          }
+
+          return { update, isRunning };
+        })();
+
+        function syncWeatherAudio(fromUserGesture) {
+          const sim = state.simulation;
+          if (!sim || !state.soundEnabled || (!state.isPlaying && !state.soundPreview)) {
+            WeatherAudio.update(null, false, Boolean(fromUserGesture));
+            return;
+          }
+          const idx = Math.min(sim.steps.length - 1, Math.round(state.currentHour));
+          WeatherAudio.update(sim.steps[idx], true, Boolean(fromUserGesture));
+        }
+
+        function renderSoundButton() {
+          const btn = document.getElementById('btn-sound-toggle');
+          if (!btn) return;
+          if (!state.soundEnabled) {
+            btn.textContent = '날씨 소리: 꺼짐';
+            btn.style.borderColor = 'var(--border-focus)';
+            btn.style.color = 'var(--text-muted)';
+            btn.style.background = 'var(--bg-panel)';
+            return;
+          }
+          const sim = state.simulation;
+          const idx = sim ? Math.min(sim.steps.length - 1, Math.round(state.currentHour)) : 0;
+          const step = sim ? sim.steps[idx] : state.environment ? state.environment.current : null;
+          const info = describeWeather(step);
+          const shortMood = info.mood === 'rain' || info.mood === 'storm' ? '비·바람' : info.mood === 'sunny' ? '화창·파도' : '바람·파도';
+          const playingNow = (state.isPlaying || state.soundPreview) && WeatherAudio.isRunning();
+          btn.textContent = playingNow ? `날씨 소리: ${shortMood} (재생 중)` : `날씨 소리: ${shortMood} (듣기)`;
+          btn.style.borderColor = 'rgba(34,211,238,0.55)';
+          btn.style.color = '#a5f3fc';
+          btn.style.background = playingNow ? 'rgba(34,211,238,0.18)' : 'var(--bg-panel)';
+        }
+
+        function stopAnimation() {
+          state.isPlaying = false;
+          state.soundPreview = false;
+          lastFrameTime = null;
+          if (rafHandle !== null) {
+            window.cancelAnimationFrame(rafHandle);
+            rafHandle = null;
+          }
+          syncWeatherAudio(false);
+          renderPlaybackToolbar();
+        }
+
+        function startAnimation(fromUserGesture) {
+          if (!state.simulation) return;
+          if (state.currentHour >= state.simulation.durationHours - 0.05) {
+            state.currentHour = 0;
+          }
+          state.isPlaying = true;
+          state.soundPreview = false;
+          lastFrameTime = null;
+          syncWeatherAudio(Boolean(fromUserGesture));
+          renderPlaybackToolbar();
+
+          const tick = (now) => {
+            if (!state.isPlaying || !state.simulation) return;
+            if (lastFrameTime === null) lastFrameTime = now;
+            const dtSec = Math.min(0.1, (now - lastFrameTime) / 1000);
+            lastFrameTime = now;
+            state.currentHour += dtSec * 1.5 * state.playbackSpeed;
+            if (state.currentHour >= state.simulation.durationHours) {
+              state.currentHour = state.simulation.durationHours;
+              stopAnimation();
+              drawParticleCanvas();
+              renderPlaybackToolbar();
+              renderEnvironmentChart();
+              return;
+            }
+            drawParticleCanvas();
+            renderPlaybackToolbar();
+            renderEnvironmentChart();
+            syncWeatherAudio(false);
+            rafHandle = window.requestAnimationFrame(tick);
+          };
+          rafHandle = window.requestAnimationFrame(tick);
+        }
+
+        /* =========================================================
+           8. UI Rendering Functions
+        ========================================================= */
+        function showError(msg) {
+          state.errorMessage = msg;
+          const el = document.getElementById('map-error-banner');
+          if (msg) {
+            el.textContent = '✖ ' + msg;
+            el.classList.remove('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        }
+
+        function setLoading(loading) {
+          state.isLoading = loading;
+          const btn = document.getElementById('btn-refresh');
+          btn.disabled = loading;
+          btn.textContent = loading ? '수집 중...' : '데이터 갱신';
+          document.getElementById('map-loading-banner').classList.toggle('hidden', !loading);
+          document.getElementById('control-loading-text').classList.toggle('hidden', !loading);
+        }
+
+        function renderPresetButtons() {
+          const wrap = document.getElementById('preset-row');
+          wrap.innerHTML = '';
+          COASTAL_PRESETS.slice(0, 4).forEach((p) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            const active = Math.abs(p.lat - state.originLat) < 0.01 && Math.abs(p.lng - state.originLng) < 0.01;
+            btn.className = 'preset-btn' + (active ? ' active' : '');
+            const parts = p.name.split(' ');
+            btn.textContent = parts[0] + ' ' + parts[1];
+            btn.addEventListener('click', () => selectLocation(p.lat, p.lng, p.name, true));
+            wrap.appendChild(btn);
+          });
+        }
+
+        function updateLocationCard() {
+          const onLand = isPointOnLand(state.originLat, state.originLng);
+          document.getElementById('active-location-name').textContent = state.locationName;
+          document.getElementById('active-location-coords').textContent = `${state.originLat.toFixed(4)}°, ${state.originLng.toFixed(4)}°`;
+          const badge = document.getElementById('origin-land-status');
+          badge.textContent = onLand ? '▲ 육지 판별' : '● 해상 판별';
+          badge.style.color = onLand ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+          document.getElementById('land-warning-box').classList.toggle('hidden', !onLand);
+          renderPresetButtons();
+        }
+
+        function renderDebrisButtons() {
+          const grid = document.getElementById('debris-grid');
+          grid.innerHTML = '';
+          DEBRIS_LIST.forEach((d) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'debris-btn' + (state.debrisType === d.id ? ' active' : '');
+            btn.innerHTML = `
+              <div class="debris-top">
+                <span>${d.nameKo}</span>
+                <span class="dot-swatch" style="background:${d.colorHex};"></span>
+              </div>
+              <span class="debris-sub mono">풍압계수 ${(d.windageCoeff * 100).toFixed(1)}%</span>
+            `;
+            btn.addEventListener('click', () => {
+              state.debrisType = d.id;
+              renderDebrisButtons();
+              recomputeSimulation(false);
+            });
+            grid.appendChild(btn);
+          });
+        }
+
+        function renderDurationButtons() {
+          const group = document.getElementById('duration-group');
+          group.innerHTML = '';
+          DURATIONS.forEach((h) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'seg-btn mono' + (state.durationHours === h ? ' active' : '');
+            btn.textContent = h + 'h';
+            btn.addEventListener('click', () => {
+              state.durationHours = h;
+              state.currentHour = Math.min(state.currentHour, h);
+              renderDurationButtons();
+              recomputeSimulation(false);
+            });
+            group.appendChild(btn);
+          });
+        }
+
+        function formatKoShortDateTime(iso) {
+          if (!iso) return '-';
+          const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+          if (!m) return iso;
+          const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+          const days = ['일', '월', '화', '수', '목', '금', '토'];
+          return `${Number(m[2])}월 ${Number(m[3])}일(${days[dt.getDay()]}) ${m[4]}:${m[5]}`;
+        }
+
+        function renderScenarioSelect() {
+          const quickWrap = document.getElementById('scenario-quick-row');
+          const quickModes = [
+            { id: 'realtime', label: '현재 실시간' },
+            { id: 'past_1d', label: '1일 전' },
+            { id: 'past_3d', label: '3일 전' }
+          ];
+          quickWrap.innerHTML = '';
+          quickModes.forEach((qm) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'preset-btn' + (state.scenarioMode === qm.id ? ' active' : '');
+            btn.style.textAlign = 'center';
+            btn.textContent = qm.label;
+            btn.addEventListener('click', () => {
+              state.scenarioMode = qm.id;
+              renderScenarioSelect();
+              refreshEnvironment(true);
+            });
+            quickWrap.appendChild(btn);
+          });
+
+          const select = document.getElementById('scenario-select');
+          if (!select.options.length) {
+            SCENARIO_OPTIONS.forEach((opt) => {
+              const el = document.createElement('option');
+              el.value = opt.id;
+              el.textContent = `${opt.labelKo} (${opt.badgeKo})`;
+              select.appendChild(el);
+            });
+          }
+          select.value = state.scenarioMode;
+          const meta = SCENARIO_OPTIONS.find((o) => o.id === state.scenarioMode) || SCENARIO_OPTIONS[0];
+          document.getElementById('scenario-desc').textContent = meta.descriptionKo;
+          document.getElementById('scenario-badge-text').textContent = meta.badgeKo;
+          document.getElementById('scenario-badge-text').style.color = meta.isVirtual ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+
+          const env = state.environment;
+          if (env && env.hourly.length) {
+            const startIso = env.hourly[0].timeIso || env.referenceStartIso;
+            const endIdx = Math.min(env.hourly.length - 1, state.durationHours);
+            const endIso = env.hourly[endIdx] ? env.hourly[endIdx].timeIso : startIso;
+            document.getElementById('scenario-window-text').textContent =
+              `${formatKoShortDateTime(startIso)} → ${formatKoShortDateTime(endIso)} (${env.timezone})`;
+          }
+        }
+
+        function renderBasemapButtons() {
+          const wrap = document.getElementById('basemap-buttons');
+          wrap.innerHTML = '';
+          Object.keys(BASEMAPS).forEach((id) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'preset-btn' + (state.basemap === id ? ' active' : '');
+            btn.textContent = BASEMAPS[id].label;
+            btn.addEventListener('click', () => switchBasemap(id));
+            wrap.appendChild(btn);
+          });
+        }
+
+        function renderSpeedButtons() {
+          const wrap = document.getElementById('speed-group');
+          wrap.innerHTML = '';
+          [1, 2, 4].forEach((spd) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'speed-btn mono' + (state.playbackSpeed === spd ? ' active' : '');
+            btn.textContent = spd + 'x';
+            btn.addEventListener('click', () => {
+              state.playbackSpeed = spd;
+              renderSpeedButtons();
+            });
+            wrap.appendChild(btn);
+          });
+        }
+
+        function renderCursorProbe() {
+          const el = document.getElementById('map-cursor-probe');
+          if (!state.hoverProbe) {
+            el.innerHTML = '원(●): 부유 중 · 사각형(■): 해안 도달';
+            return;
+          }
+          const hp = state.hoverProbe;
+          const label = hp.onLand
+            ? '<span style="color:var(--accent-amber);">육지</span>'
+            : '<span style="color:var(--accent-cyan);">해상</span>';
+          el.innerHTML = `<span class="mono">${hp.lat.toFixed(3)}°, ${hp.lng.toFixed(3)}°</span> · ${label}`;
+        }
+
+        function renderPlaybackToolbar() {
+          const sim = state.simulation;
+          const playBtn = document.getElementById('btn-play');
+          const restartBtn = document.getElementById('btn-restart');
+          const scrubber = document.getElementById('time-scrubber');
+
+          playBtn.disabled = !sim;
+          restartBtn.disabled = !sim;
+          scrubber.disabled = !sim;
+
+          if (!sim) {
+            renderSoundButton();
+            return;
+          }
+
+          if (state.isPlaying) {
+            playBtn.textContent = '일시정지';
+          } else if (state.currentHour >= sim.durationHours - 0.05) {
+            playBtn.textContent = '다시 재생';
+          } else {
+            playBtn.textContent = '시뮬레이션 시작';
+          }
+
+          scrubber.max = String(sim.durationHours);
+          scrubber.value = String(state.currentHour);
+          const idx = Math.min(sim.steps.length - 1, Math.round(state.currentHour));
+          const step = sim.steps[idx];
+
+          document.getElementById('time-elapsed-label').textContent = `T+${state.currentHour.toFixed(1)}h`;
+          document.getElementById('time-total-label').textContent = `${sim.durationHours}h`;
+
+          document.getElementById('hud-sim-time').textContent = step.timeIso
+            ? `${formatKoShortDateTime(step.timeIso)} (T+${state.currentHour.toFixed(1)}h)`
+            : `T+${state.currentHour.toFixed(1)}h`;
+          const wInfo = describeWeather(step);
+          document.getElementById('hud-weather-label').textContent = wInfo.label;
+
+          document.getElementById('hud-dist').textContent = step.cumulativeDistanceKm.toFixed(1);
+          const beachEl = document.getElementById('hud-beached');
+          beachEl.textContent = `${step.beachedCount}/${sim.debrisCount}개`;
+          beachEl.style.color = step.beachedCount > 0 ? 'var(--accent-rose)' : '#f8fafc';
+
+          document.getElementById('hud-wind').textContent =
+            step.windSpeedMs !== null ? `${step.windSpeedMs.toFixed(1)} m/s (${formatCompassKo(step.windDirFromDeg)}풍)` : '데이터 없음';
+          document.getElementById('hud-current').textContent =
+            step.currentSpeedMs !== null ? `${step.currentSpeedMs.toFixed(2)} m/s (${formatCompassKo(step.currentDirToDeg)}향)` : '데이터 없음';
+
+          renderSoundButton();
+        }
+
+        function setStatusBadge(elId, status, isVirtual) {
+          const el = document.getElementById(elId);
+          if (isVirtual && status !== 'unavailable') {
+            el.className = 'status-assumed';
+            el.textContent = '◆ 가상 조건 변형';
+          } else if (status === 'api_real') {
+            el.className = 'status-real';
+            el.textContent = '● API 실측·예보';
+          } else if (status === 'assumed_fallback') {
+            el.className = 'status-assumed';
+            el.textContent = '▲ 보간 추정값';
+          } else {
+            el.className = 'status-missing';
+            el.textContent = '✖ 데이터 없음';
+          }
+        }
+
+        function formatKoTime(iso) {
+          if (!iso) return '-';
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return iso.replace('T', ' ');
+          return d.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+
+        function renderEnvironmentPanel() {
+          const env = state.environment;
+          if (!env) return;
+
+          const startIso = env.hourly[0] ? env.hourly[0].timeIso : env.referenceStartIso;
+          const endIdx = Math.min(env.hourly.length - 1, state.durationHours);
+          const endIso = env.hourly[endIdx] ? env.hourly[endIdx].timeIso : startIso;
+
+          document.getElementById('env-sources').textContent = `출처: ${env.weatherSource} · ${env.marineSource}`;
+          document.getElementById('env-fetched-at').textContent = `데이터 수집 시각: ${formatKoTime(env.fetchedAtIso)} · ${env.scenarioLabelKo}`;
+          document.getElementById('env-ref-time').textContent = `적용 구간: ${formatKoShortDateTime(startIso)} ~ ${formatKoShortDateTime(endIso)} (${env.timezone})`;
+          renderScenarioSelect();
+
+          const c = env.current;
+          setStatusBadge('status-wind', env.fieldStatuses.wind, env.isVirtualModified && env.scenarioMode !== 'virtual_reverse_current');
+          setStatusBadge('status-current', env.fieldStatuses.oceanCurrent, env.scenarioMode === 'virtual_reverse_current');
+          setStatusBadge('status-wave', env.fieldStatuses.wave, false);
+
+          document.getElementById('val-wind-spd').textContent = c.windSpeedMs !== null ? c.windSpeedMs.toFixed(1) : '—';
+          document.getElementById('val-wind-dir').textContent =
+            c.windDirFromDeg !== null ? `${Math.round(c.windDirFromDeg)}° (${formatCompassKo(c.windDirFromDeg)}풍 유입)` : '풍향 없음';
+          document.getElementById('grid-weather').textContent =
+            env.weatherGridLat !== null ? `격자 좌표: ${env.weatherGridLat.toFixed(2)}°, ${env.weatherGridLng.toFixed(2)}°` : '격자 좌표: -';
+
+          document.getElementById('val-cur-spd').textContent = c.currentSpeedMs !== null ? c.currentSpeedMs.toFixed(2) : '없음';
+          document.getElementById('unit-cur-spd').classList.toggle('hidden', c.currentSpeedMs === null);
+          document.getElementById('val-cur-dir').textContent =
+            c.currentDirToDeg !== null ? `${Math.round(c.currentDirToDeg)}° (${formatCompassKo(c.currentDirToDeg)}향 유출)` : '해류 벡터 없음';
+          document.getElementById('grid-marine').textContent =
+            c.currentSpeedKmh !== null ? `환산 유속 ${c.currentSpeedKmh.toFixed(2)} km/h` : '연안 격자 외측 — 해류 0 m/s 처리';
+
+          document.getElementById('val-wave-h').textContent = c.waveHeightM !== null ? c.waveHeightM.toFixed(2) : '없음';
+          document.getElementById('unit-wave-h').classList.toggle('hidden', c.waveHeightM === null);
+          document.getElementById('val-wave-dir').textContent =
+            c.waveDirFromDeg !== null ? `${Math.round(c.waveDirFromDeg)}° (${formatCompassKo(c.waveDirFromDeg)})` : '파향 없음';
+          document.getElementById('val-wave-period').textContent =
+            c.wavePeriodS !== null ? `파주기 ${c.wavePeriodS.toFixed(1)} s · 스토크스 표류 반영` : '파랑 데이터 없음 (스토크스 항 0)';
+
+          const notesBox = document.getElementById('env-notes');
+          if (env.notes.length > 0) {
+            notesBox.innerHTML = '<ul>' + env.notes.map((n) => `<li>${n}</li>`).join('') + '</ul>';
+            notesBox.classList.remove('hidden');
+          } else {
+            notesBox.classList.add('hidden');
+          }
+
+          renderEnvironmentChart();
+        }
+
+        function renderEnvironmentChart() {
+          const env = state.environment;
+          if (!env) return;
+          const slice = env.hourly.slice(0, state.durationHours + 1);
+          document.getElementById('env-chart-title').textContent = `시뮬레이션 구간(${state.durationHours}시간) 시간별 기상·해양 변화`;
+
+          const svg = document.getElementById('env-chart-svg');
+          const W = 620, H = 150, pL = 36, pR = 36, pT = 14, pB = 26;
+          const iW = W - pL - pR, iH = H - pT - pB;
+          const maxW = Math.max(10, ...slice.map((h) => h.windSpeedMs ?? 0));
+          const maxM = Math.max(1.5, ...slice.map((h) => Math.max(h.currentSpeedMs ?? 0, h.waveHeightM ?? 0)));
+          const xAt = (i) => (slice.length <= 1 ? pL : pL + (i / (slice.length - 1)) * iW);
+          const yW = (v) => pT + iH - (v / maxW) * iH;
+          const yM = (v) => pT + iH - (v / maxM) * iH;
+
+          const mkPath = (fn, yFn) => {
+            let d = '';
+            slice.forEach((p, idx) => {
+              const v = fn(p);
+              if (v === null) return;
+              d += (d ? ' L ' : ' M ') + xAt(idx).toFixed(1) + ' ' + yFn(v).toFixed(1);
+            });
+            return d;
+          };
+
+          let html = '';
+          [0, 0.5, 1].forEach((t) => {
+            const y = pT + iH * (1 - t);
+            html += `<line x1="${pL}" x2="${W - pR}" y1="${y}" y2="${y}" stroke="#162A47" stroke-width="1"/>`;
+            html += `<text x="${pL - 5}" y="${y + 3}" text-anchor="end" fill="#64748B" font-size="9" font-family="IBM Plex Mono">${(maxW * t).toFixed(0)}</text>`;
+            html += `<text x="${W - pR + 5}" y="${y + 3}" text-anchor="start" fill="#64748B" font-size="9" font-family="IBM Plex Mono">${(maxM * t).toFixed(1)}</text>`;
+          });
+
+          const step = state.durationHours <= 12 ? 3 : state.durationHours <= 24 ? 6 : 12;
+          slice.forEach((_, idx) => {
+            if (idx % step === 0 || idx === slice.length - 1) {
+              html += `<text x="${xAt(idx)}" y="${H - 7}" text-anchor="middle" fill="#64748B" font-size="9" font-family="IBM Plex Mono">+${idx}h</text>`;
+            }
+          });
+
+          const wp = mkPath((p) => p.windSpeedMs, yW);
+          const cp = mkPath((p) => p.currentSpeedMs, yM);
+          const wvp = mkPath((p) => p.waveHeightM, yM);
+          if (wp) html += `<path d="${wp}" fill="none" stroke="#22D3EE" stroke-width="2"/>`;
+          if (cp) html += `<path d="${cp}" fill="none" stroke="#60A5FA" stroke-width="1.8"/>`;
+          if (wvp) html += `<path d="${wvp}" fill="none" stroke="#34D399" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+
+          // Current simulation time marker line on environment chart
+          if (state.simulation) {
+            const simIdx = Math.min(slice.length - 1, Math.max(0, state.currentHour));
+            const sx = xAt(simIdx);
+            html += `<line x1="${sx}" x2="${sx}" y1="${pT}" y2="${pT + iH}" stroke="#22D3EE" stroke-width="1.6" stroke-opacity="0.75"/>`;
+          }
+
+          if (state.envHoverIdx !== null && slice[state.envHoverIdx]) {
+            const x = xAt(state.envHoverIdx);
+            html += `<line x1="${x}" x2="${x}" y1="${pT}" y2="${pT + iH}" stroke="#94A3B8" stroke-width="1" stroke-dasharray="2 2"/>`;
+            const pt = slice[state.envHoverIdx];
+            const wInfo = describeWeather(pt);
+            document.getElementById('env-chart-readout').innerHTML = `
+              <span>T+${state.envHoverIdx}h · ${formatKoShortDateTime(pt.timeIso)} (${wInfo.label})</span>
+              <span style="display:flex; gap:14px;">
+                <span style="color:var(--accent-cyan);">풍속 ${pt.windSpeedMs !== null ? pt.windSpeedMs.toFixed(1) + ' m/s' : '없음'}</span>
+                <span style="color:var(--accent-blue);">해류 ${pt.currentSpeedMs !== null ? pt.currentSpeedMs.toFixed(2) + ' m/s' : '없음'}</span>
+                <span style="color:var(--accent-emerald);">파고 ${pt.waveHeightM !== null ? pt.waveHeightM.toFixed(2) + ' m' : '없음'}</span>
+              </span>
+            `;
+          } else {
+            const simIdx = Math.min(slice.length - 1, Math.round(state.currentHour));
+            const curPt = slice[simIdx];
+            if (curPt) {
+              const wInfo = describeWeather(curPt);
+              document.getElementById('env-chart-readout').innerHTML =
+                `<span>현재 시점: <strong style="color:var(--accent-cyan);">${formatKoShortDateTime(curPt.timeIso)} (T+${simIdx}h)</strong> · ${wInfo.label}</span><span style="color:var(--text-dim);">그래프 위 마우스 이동으로 시간별 확인</span>`;
+            } else {
+              document.getElementById('env-chart-readout').innerHTML =
+                '<span style="color:var(--text-dim);">그래프 위에 마우스를 올리면 시간별 풍속·해류·파고 수치를 확인할 수 있습니다.</span>';
+            }
+          }
+
+          svg.innerHTML = html;
+        }
+
+        function renderResultsSection() {
+          const sim = state.simulation;
+          if (!sim) return;
+          const profile = DEBRIS_MAP[sim.debrisType];
+
+          const statusTag = sim.environment.isVirtualModified
+            ? '<span style="color:var(--accent-amber);">◆ 가상 비교 조건 포함</span>'
+            : sim.usedAssumedData
+            ? '<span style="color:var(--accent-amber);">▲ 일부 결측/추정 포함</span>'
+            : '<span style="color:var(--accent-emerald);">● 전 항목 API 실측·예보 기반</span>';
+
+          document.getElementById('result-meta-line').innerHTML = `${sim.locationName} · ${profile.nameKo} (${sim.debrisCount}개) · ${sim.durationHours}시간 예측 · ${statusTag}`;
+
+          const alreadySaved = state.savedSimulations.some((s) => s.result.id === sim.id);
+          const saveBtn = document.getElementById('btn-save-run');
+          saveBtn.disabled = alreadySaved;
+          saveBtn.textContent = alreadySaved ? '비교 목록에 저장됨' : '현재 결과 저장';
+
+          document.getElementById('res-path-km').textContent = sim.totalMeanPathKm.toFixed(2);
+          document.getElementById('res-path-nm').textContent = `(${(sim.totalMeanPathKm / 1.852).toFixed(1)} nm)`;
+          document.getElementById('res-net-km').textContent = `직선 변위 ${sim.totalNetDistanceKm.toFixed(2)} km`;
+
+          document.getElementById('res-bearing-deg').textContent = Math.round(sim.meanBearingDeg) + '°';
+          document.getElementById('res-bearing-ko').textContent = formatCompassKo(sim.meanBearingDeg) + '쪽 방향';
+          document.getElementById('res-duration-note').textContent = `기간 ${sim.durationHours}시간 기준 평균 벡터`;
+
+          document.getElementById('res-origin-coord').textContent = `출발: ${sim.originLat.toFixed(3)}°, ${sim.originLng.toFixed(3)}°`;
+          document.getElementById('res-final-coord').textContent = `도착: ${sim.meanFinalLat.toFixed(3)}°, ${sim.meanFinalLng.toFixed(3)}°`;
+
+          const bCountEl = document.getElementById('res-beached-count');
+          bCountEl.textContent = String(sim.beachedParticleCount);
+          bCountEl.style.color = sim.beachedParticleCount > 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)';
+          document.getElementById('res-beached-total').textContent = `/ ${sim.debrisCount}개 도달`;
+          document.getElementById('res-beached-note').textContent = sim.originOnLand
+            ? '출발점이 육지로 판별되어 해안 충돌 비활성'
+            : sim.beachedParticleCount > 0
+            ? `최초 해안 도달: T+${sim.firstBeachingHour.toFixed(1)}시간`
+            : '시뮬레이션 기간 내 외해 부유 유지';
+
+          // Debris breakdown bars
+          const maxKm = Math.max(0.1, ...sim.debrisComparison.map((d) => d.pathDistanceKm));
+          const listWrap = document.getElementById('debris-breakdown-list');
+          listWrap.innerHTML = sim.debrisComparison
+            .map((d) => {
+              const pct = Math.max(4, Math.round((d.pathDistanceKm / maxKm) * 100));
+              const sel = d.debrisType === sim.debrisType ? ' selected' : '';
+              return `
+                <div class="debris-comp-item${sel}">
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                    <span style="display:flex; align-items:center; gap:7px;">
+                      <span class="dot-swatch" style="background:${d.colorHex};"></span>
+                      <strong>${d.nameKo}</strong>
+                      <span class="mono" style="font-size:10px; color:var(--text-muted);">풍압 ${(d.windageCoeff * 100).toFixed(1)}%</span>
+                    </span>
+                    <strong class="mono">${d.pathDistanceKm.toFixed(2)} km</strong>
+                  </div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${d.colorHex};"></div></div>
+                  <div class="mono" style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted);">
+                    <span>이동 방향 ${Math.round(d.bearingDeg)}° (${formatCompassKo(d.bearingDeg)})</span>
+                    <span>해안 도달 ${(d.beachedRatio * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              `;
+            })
+            .join('');
+
+          renderDistanceChart();
+          renderComparisonSection();
+        }
+
+        function renderDistanceChart() {
+          const sim = state.simulation;
+          if (!sim) return;
+          const compEntry = state.savedSimulations.find((s) => s.id === state.comparisonId);
+          const comp = compEntry ? compEntry.result : null;
+          document.getElementById('dist-comp-legend').classList.toggle('hidden', !comp);
+
+          const steps = sim.steps;
+          const compSteps = comp ? comp.steps : [];
+          const maxH = Math.max(sim.durationHours, comp ? comp.durationHours : 0);
+          const maxD = Math.max(1, ...steps.map((s) => s.cumulativeDistanceKm), ...compSteps.map((s) => s.cumulativeDistanceKm));
+
+          const W = 620, H = 190, pL = 44, pR = 16, pT = 16, pB = 28;
+          const iW = W - pL - pR, iH = H - pT - pB;
+          const xAt = (h) => (maxH <= 0 ? pL : pL + (h / maxH) * iW);
+          const yAt = (km) => pT + iH - (km / maxD) * iH;
+
+          const curPath = steps.map((s, i) => `${i === 0 ? 'M' : 'L'} ${xAt(s.hour).toFixed(1)} ${yAt(s.cumulativeDistanceKm).toFixed(1)}`).join(' ');
+          const curArea = `${curPath} L ${xAt(steps[steps.length - 1].hour).toFixed(1)} ${pT + iH} L ${xAt(0).toFixed(1)} ${pT + iH} Z`;
+          const cmpPath = compSteps.length
+            ? compSteps.map((s, i) => `${i === 0 ? 'M' : 'L'} ${xAt(s.hour).toFixed(1)} ${yAt(s.cumulativeDistanceKm).toFixed(1)}`).join(' ')
+            : '';
+
+          let html = `
+            <defs>
+              <linearGradient id="driftAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.22"/>
+                <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+          `;
+
+          [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
+            const y = pT + iH * (1 - t);
+            html += `<line x1="${pL}" x2="${W - pR}" y1="${y}" y2="${y}" stroke="#162A47" stroke-width="1"/>`;
+            html += `<text x="${pL - 6}" y="${y + 3}" text-anchor="end" fill="#64748B" font-size="9" font-family="IBM Plex Mono">${(maxD * t).toFixed(1)}</text>`;
+          });
+
+          for (let i = 0; i <= 4; i++) {
+            const hv = Math.round((maxH * i) / 4);
+            html += `<text x="${xAt(hv)}" y="${H - 8}" text-anchor="middle" fill="#64748B" font-size="9" font-family="IBM Plex Mono">${hv}h</text>`;
+          }
+
+          html += `<path d="${curArea}" fill="url(#driftAreaGrad)"/>`;
+          if (cmpPath) html += `<path d="${cmpPath}" fill="none" stroke="#F59E0B" stroke-width="2" stroke-dasharray="5 4"/>`;
+          html += `<path d="${curPath}" fill="none" stroke="#22D3EE" stroke-width="2.2"/>`;
+
+          if (state.distHoverIdx !== null && steps[state.distHoverIdx]) {
+            const st = steps[state.distHoverIdx];
+            const cmpSt = compSteps[state.distHoverIdx];
+            const x = xAt(st.hour);
+            const y = yAt(st.cumulativeDistanceKm);
+            html += `<line x1="${x}" x2="${x}" y1="${pT}" y2="${pT + iH}" stroke="#94A3B8" stroke-width="1" stroke-dasharray="2 2"/>`;
+            html += `<circle cx="${x}" cy="${y}" r="4" fill="#22D3EE" stroke="#060D1A" stroke-width="1.5"/>`;
+
+            document.getElementById('dist-chart-readout').innerHTML = `
+              <span>경과 T+${st.hour}h</span>
+              <span style="display:flex; gap:14px;">
+                <span style="color:var(--accent-cyan);">현재: ${st.cumulativeDistanceKm.toFixed(2)} km (${st.instantSpeedMs.toFixed(2)} m/s)</span>
+                ${cmpSt ? `<span style="color:#fcd34d;">비교: ${cmpSt.cumulativeDistanceKm.toFixed(2)} km</span>` : ''}
+              </span>
+            `;
+          } else {
+            document.getElementById('dist-chart-readout').innerHTML =
+              '<span style="color:var(--text-dim);">그래프 위에 마우스를 올리면 시간별 누적 거리(km)와 속도(m/s)를 확인할 수 있습니다.</span>';
+          }
+
+          document.getElementById('dist-chart-svg').innerHTML = html;
+        }
+
+        function renderComparisonSection() {
+          const list = state.savedSimulations;
+          const sim = state.simulation;
+          const compEntry = list.find((s) => s.id === state.comparisonId);
+          const comp = compEntry ? compEntry.result : null;
+
+          document.getElementById('btn-clear-comp').classList.toggle('hidden', !comp);
+          const compMapBtn = document.getElementById('btn-toggle-comp');
+          compMapBtn.classList.toggle('hidden', !comp);
+          compMapBtn.classList.toggle('active-amber', Boolean(comp && state.showComparisonOnMap));
+
+          const deltaBox = document.getElementById('comp-delta-banner');
+          if (comp && sim) {
+            const dDist = sim.totalMeanPathKm - comp.totalMeanPathKm;
+            const sepKm = haversineKm(sim.meanFinalLat, sim.meanFinalLng, comp.meanFinalLat, comp.meanFinalLng);
+            const r1 = ((sim.beachedParticleCount / sim.debrisCount) * 100).toFixed(0);
+            const r2 = ((comp.beachedParticleCount / comp.debrisCount) * 100).toFixed(0);
+            deltaBox.innerHTML = `
+              <div><div style="font-size:11px; color:#fde68a;">비교 대상</div><div style="font-size:12px; font-weight:600; color:#fef3c7; margin-top:4px;">${comp.locationName} · ${comp.environment.scenarioLabelKo}</div></div>
+              <div><div style="font-size:11px; color:#fde68a;">총 이동 거리 차이</div><div class="mono" style="font-size:14px; font-weight:600; margin-top:4px;">${dDist >= 0 ? '+' : ''}${dDist.toFixed(2)} km</div></div>
+              <div><div style="font-size:11px; color:#fde68a;">최종 위치 이격 거리</div><div class="mono" style="font-size:14px; font-weight:600; color:#fcd34d; margin-top:4px;">${sepKm.toFixed(2)} km</div></div>
+              <div><div style="font-size:11px; color:#fde68a;">해안 도달률 비교</div><div class="mono" style="font-size:14px; font-weight:600; margin-top:4px;">${r1}% vs ${r2}%</div></div>
+            `;
+            deltaBox.classList.remove('hidden');
+          } else {
+            deltaBox.classList.add('hidden');
+          }
+
+          document.getElementById('saved-empty-box').classList.toggle('hidden', list.length > 0);
+          document.getElementById('saved-table-wrap').classList.toggle('hidden', list.length === 0);
+
+          const tbody = document.getElementById('saved-table-body');
+          tbody.innerHTML = '';
+          list.forEach((saved) => {
+            const r = saved.result;
+            const isComp = saved.id === state.comparisonId;
+            const tr = document.createElement('tr');
+            if (isComp) tr.className = 'comp-active';
+            tr.innerHTML = `
+              <td>
+                <div style="font-weight:600; color:#f8fafc;">${r.locationName}</div>
+                <div style="font-size:11px; color:var(--text-muted);">${DEBRIS_MAP[r.debrisType].nameKo} · ${r.debrisCount}개</div>
+              </td>
+              <td>
+                <div>${r.environment.scenarioLabelKo}</div>
+                <div class="mono" style="font-size:10px; color:var(--text-muted);">${r.environment.referenceStartIso.replace('T', ' ')}</div>
+              </td>
+              <td class="mono">${r.durationHours}h</td>
+              <td class="mono" style="text-align:right; font-weight:600; color:var(--accent-cyan);">${r.totalMeanPathKm.toFixed(2)} km</td>
+              <td class="mono" style="text-align:right;">${r.meanFinalLat.toFixed(3)}°, ${r.meanFinalLng.toFixed(3)}°</td>
+              <td class="mono" style="text-align:right;">${r.beachedParticleCount}/${r.debrisCount}개</td>
+              <td style="text-align:right; white-space:nowrap;">
+                <button type="button" class="btn-secondary btn-comp-toggle" style="padding:5px 10px; font-size:11px; ${isComp ? 'border-color:var(--accent-amber); color:#fde68a; background:rgba(245,158,11,0.18);' : ''}">
+                  ${isComp ? '비교 중' : '지도 비교'}
+                </button>
+                <button type="button" class="btn-secondary btn-del-saved" style="padding:5px 9px; font-size:11px; margin-left:4px; color:var(--accent-rose);">삭제</button>
+              </td>
+            `;
+            tr.querySelector('.btn-comp-toggle').addEventListener('click', () => {
+              state.comparisonId = isComp ? null : saved.id;
+              renderDistanceChart();
+              renderComparisonSection();
+              drawParticleCanvas();
+            });
+            tr.querySelector('.btn-del-saved').addEventListener('click', () => {
+              state.savedSimulations = state.savedSimulations.filter((x) => x.id !== saved.id);
+              persistSavedSimulations(state.savedSimulations);
+              if (state.comparisonId === saved.id) state.comparisonId = null;
+              renderResultsSection();
+              drawParticleCanvas();
+            });
+            tbody.appendChild(tr);
+          });
+        }
+
+        /* =========================================================
+           9. Orchestration & Event Bindings
+        ========================================================= */
+        function recomputeSimulation(autoPlay) {
+          state.simulation = runDriftSimulation();
+          if (autoPlay) {
+            const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduced) {
+              state.currentHour = state.durationHours;
+              stopAnimation();
+            } else {
+              state.currentHour = 0;
+              startAnimation();
+            }
+          }
+          renderEnvironmentPanel();
+          renderResultsSection();
+          renderPlaybackToolbar();
+          drawParticleCanvas();
+        }
+
+        async function refreshEnvironment(autoPlay) {
+          const serial = ++fetchSerial;
+          setLoading(true);
+          showError(null);
+          try {
+            const dataset = await fetchEnvironmentData(state.originLat, state.originLng, state.scenarioMode);
+            if (serial !== fetchSerial) return;
+            state.environment = dataset;
+            setLoading(false);
+            recomputeSimulation(autoPlay);
+          } catch (err) {
+            if (serial !== fetchSerial) return;
+            setLoading(false);
+            showError(err instanceof Error ? err.message : '기상·해양 API 데이터 요청 중 오류가 발생했습니다.');
+          }
+        }
+
+        function selectLocation(lat, lng, name, recenter) {
+          state.originLat = lat;
+          state.originLng = lng;
+          state.locationName = name;
+          updateLocationCard();
+          if (recenter && map) {
+            map.setView([lat, lng], Math.max(map.getZoom(), 8), { animate: true });
+          }
+          drawParticleCanvas();
+          refreshEnvironment(true);
+        }
+
+        function bindEvents() {
+          const unlockAudioOnGesture = (e) => {
+            if (e && e.target && e.target.closest && e.target.closest('#btn-sound-toggle')) return;
+            if (state.soundEnabled && (state.isPlaying || state.soundPreview)) {
+              syncWeatherAudio(true);
+              renderSoundButton();
+            }
+          };
+          document.addEventListener('pointerdown', unlockAudioOnGesture, { passive: true });
+          document.addEventListener('keydown', unlockAudioOnGesture, { passive: true });
+
+          document.getElementById('btn-refresh').addEventListener('click', () => {
+            if (state.soundEnabled) WeatherAudio.update(state.simulation ? state.simulation.steps[0] : null, false, true);
+            refreshEnvironment(true);
+          });
+
+          const downloadBtn = document.getElementById('btn-download-html');
+          if (downloadBtn) {
+            downloadBtn.addEventListener('click', async () => {
+              const origLabel = downloadBtn.textContent;
+              if (window.location.protocol === 'file:') {
+                downloadBtn.textContent = '로컬 index.html 실행 중';
+                window.setTimeout(() => { downloadBtn.textContent = origLabel; }, 2200);
+                return;
+              }
+              downloadBtn.disabled = true;
+              downloadBtn.textContent = '저장 준비 중...';
+              try {
+                const targetPath = window.location.pathname.endsWith('.html') ? window.location.pathname : './index.html';
+                const res = await fetch(targetPath, { cache: 'no-store' });
+                if (!res.ok) throw new Error('HTML_FETCH_FAILED');
+                let html = await res.text();
+                html = html.replace(/<script\s+type="module"\s+src="\/@vite\/client"><\/script>\s*/gi, '');
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'index.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+                downloadBtn.textContent = '저장 완료';
+              } catch (_err) {
+                downloadBtn.textContent = '저장 실패';
+              } finally {
+                downloadBtn.disabled = false;
+                window.setTimeout(() => { downloadBtn.textContent = origLabel; }, 2200);
+              }
+            });
+          }
+
+          // Location search
+          const searchInput = document.getElementById('location-search');
+          const dropdown = document.getElementById('search-dropdown');
+
+          searchInput.addEventListener('input', () => {
+            const q = searchInput.value.trim();
+            if (!q) {
+              dropdown.classList.add('hidden');
+              return;
+            }
+            window.clearTimeout(searchTimer);
+            dropdown.innerHTML = '<div style="padding:10px 12px; font-size:12px; color:var(--text-muted);">위치 검색 중...</div>';
+            dropdown.classList.remove('hidden');
+
+            searchTimer = window.setTimeout(async () => {
+              const results = await searchLocations(q);
+              if (!results.length) {
+                dropdown.innerHTML = '<div style="padding:10px 12px; font-size:12px; color:var(--text-muted);">검색 결과가 없습니다. 지도에서 직접 클릭해 보세요.</div>';
+                return;
+              }
+              dropdown.innerHTML = '';
+              results.forEach((item) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'search-item';
+                btn.innerHTML = `<div class="search-item-name">${item.name}</div><div class="search-item-detail">${item.detail}</div>`;
+                btn.addEventListener('click', () => {
+                  searchInput.value = '';
+                  dropdown.classList.add('hidden');
+                  selectLocation(item.lat, item.lng, item.name, true);
+                });
+                dropdown.appendChild(btn);
+              });
+            }, 280);
+          });
+
+          document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-wrap')) dropdown.classList.add('hidden');
+          });
+
+          // Snap to ocean
+          document.getElementById('btn-snap-ocean').addEventListener('click', () => {
+            const ocean = findNearestOceanPoint(state.originLat, state.originLng);
+            if (ocean) {
+              selectLocation(ocean.lat, ocean.lng, state.locationName.replace(' (해상 보정)', '') + ' (해상 보정)', true);
+            }
+          });
+
+          // Debris count slider
+          const countSlider = document.getElementById('debris-count-slider');
+          countSlider.addEventListener('input', () => {
+            state.debrisCount = Number(countSlider.value);
+            document.getElementById('debris-count-val').textContent = state.debrisCount + '개';
+            recomputeSimulation(false);
+          });
+
+          // Scenario select
+          document.getElementById('scenario-select').addEventListener('change', (e) => {
+            state.scenarioMode = e.target.value;
+            renderScenarioSelect();
+            refreshEnvironment(true);
+          });
+
+          // Map controls
+          document.getElementById('btn-zoom-in').addEventListener('click', () => map && map.zoomIn());
+          document.getElementById('btn-zoom-out').addEventListener('click', () => map && map.zoomOut());
+          document.getElementById('btn-fit-track').addEventListener('click', fitMapToTrajectory);
+          document.getElementById('btn-toggle-land').addEventListener('click', () => toggleLandLayer());
+          document.getElementById('btn-toggle-comp').addEventListener('click', () => {
+            state.showComparisonOnMap = !state.showComparisonOnMap;
+            renderComparisonSection();
+            drawParticleCanvas();
+          });
+
+          // Playback controls & sound toggle
+          document.getElementById('btn-play').addEventListener('click', () => {
+            if (state.isPlaying) {
+              stopAnimation();
+            } else {
+              startAnimation(true);
+            }
+          });
+          document.getElementById('btn-restart').addEventListener('click', () => {
+            state.currentHour = 0;
+            startAnimation(true);
+          });
+          document.getElementById('btn-sound-toggle').addEventListener('click', () => {
+            const wasRunning = WeatherAudio.isRunning();
+            if (!state.soundEnabled) {
+              state.soundEnabled = true;
+              if (!state.isPlaying) state.soundPreview = true;
+            } else if (!wasRunning || (!state.isPlaying && !state.soundPreview)) {
+              state.soundEnabled = true;
+              if (!state.isPlaying) state.soundPreview = true;
+            } else {
+              state.soundEnabled = false;
+              state.soundPreview = false;
+            }
+            syncWeatherAudio(true);
+            renderSoundButton();
+          });
+          document.getElementById('time-scrubber').addEventListener('input', (e) => {
+            stopAnimation();
+            state.currentHour = Number(e.target.value);
+            drawParticleCanvas();
+            renderPlaybackToolbar();
+            renderEnvironmentChart();
+          });
+
+          // SVG chart hover probes
+          function getSvgX(svgEl, clientX, fallbackW) {
+            try {
+              const pt = svgEl.createSVGPoint();
+              pt.x = clientX;
+              pt.y = 0;
+              const ctm = svgEl.getScreenCTM();
+              if (ctm) return pt.matrixTransform(ctm.inverse()).x;
+            } catch (_e) {
+              // fallback
+            }
+            const rect = svgEl.getBoundingClientRect();
+            return ((clientX - rect.left) / Math.max(1, rect.width)) * fallbackW;
+          }
+
+          const envSvg = document.getElementById('env-chart-svg');
+          envSvg.addEventListener('mousemove', (e) => {
+            if (!state.environment) return;
+            const len = Math.min(state.environment.hourly.length, state.durationHours + 1);
+            const relX = getSvgX(envSvg, e.clientX, 620) - 36;
+            const ratio = Math.max(0, Math.min(1, relX / (620 - 72)));
+            state.envHoverIdx = Math.round(ratio * (len - 1));
+            renderEnvironmentChart();
+          });
+          envSvg.addEventListener('mouseleave', () => {
+            state.envHoverIdx = null;
+            renderEnvironmentChart();
+          });
+
+          const distSvg = document.getElementById('dist-chart-svg');
+          distSvg.addEventListener('mousemove', (e) => {
+            if (!state.simulation) return;
+            const len = state.simulation.steps.length;
+            const relX = getSvgX(distSvg, e.clientX, 620) - 44;
+            const ratio = Math.max(0, Math.min(1, relX / (620 - 60)));
+            state.distHoverIdx = Math.min(len - 1, Math.round(ratio * (len - 1)));
+            renderDistanceChart();
+          });
+          distSvg.addEventListener('mouseleave', () => {
+            state.distHoverIdx = null;
+            renderDistanceChart();
+          });
+
+          // Save / Clear comparison
+          document.getElementById('btn-save-run').addEventListener('click', () => {
+            const sim = state.simulation;
+            if (!sim) return;
+            if (state.savedSimulations.some((s) => s.result.id === sim.id)) return;
+            const entry = {
+              id: sim.id,
+              label: `${sim.locationName} (${sim.environment.scenarioLabelKo})`,
+              savedAtIso: new Date().toISOString(),
+              result: sim
+            };
+            state.savedSimulations = [entry, ...state.savedSimulations].slice(0, 10);
+            persistSavedSimulations(state.savedSimulations);
+            renderResultsSection();
+          });
+
+          document.getElementById('btn-clear-comp').addEventListener('click', () => {
+            state.comparisonId = null;
+            renderDistanceChart();
+            renderComparisonSection();
+            drawParticleCanvas();
+          });
+        }
+
+        /* =========================================================
+           10. Bootstrap
+        ========================================================= */
+        function bootstrap() {
+          renderPresetButtons();
+          updateLocationCard();
+          renderDebrisButtons();
+          renderDurationButtons();
+          renderScenarioSelect();
+          renderBasemapButtons();
+          renderSpeedButtons();
+          bindEvents();
+          initMap();
+          loadLandMaskData();
+          refreshEnvironment(true);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', bootstrap);
+        } else {
+          bootstrap();
+        }
+      })();
+    </script>
+  </body>
+</html>
